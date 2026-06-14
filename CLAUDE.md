@@ -1,7 +1,8 @@
 # Chiang Mai Transit Planner — project guide
 
 A browser **build-and-observe public-transport sandbox** on the real Chiang Mai map. You draw
-metro lines (place stations → lay track → finish; extend / demolish / undo); ~15,000 simulated
+two modes — **metro** trunk (place stations → lay track → finish; extend/demolish/undo) and
+**songthaew** road-bound feeders (draw a route along the streets) — ~15,000 simulated
 commuters (residents, students, tourists) walk, drive (jamming roads), or ride. You fight
 **crowding** and serve real **origin→destination demand** while watching a live **City Score**.
 
@@ -63,6 +64,10 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
 - **Crowding + waits → satisfaction** caps the grade; riders complain when packed/slow.
 - **Fares** are a demand lever (per-line, ฿5 steps): ↑fare → fewer riders / more revenue.
 - **Difficulty** (Easy/Medium/Challenge/Hard) scales budget/cost/opex/fare/capacity + targets.
+- **Modes** (`LineMode = "metro" | "songthaew"`): metro = fast, grade-separated trunk (station→track
+  build). Songthaew = cheap, road-bound, tiny-capacity FEEDER (draw-a-route via `addLine`/`buildLine`);
+  it overcrowds on busy corridors + adds traffic, so it complements metro and can't reach A alone. Road
+  vehicles render as a red truck (`TRUCK` icon, `vehicle.road` flag); metro as the capsule train.
 
 ## Design system
 `design-system/` holds self-contained HTML preview cards mirrored to a **claude.ai/design**

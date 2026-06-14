@@ -67,7 +67,7 @@ export interface ZoneData {
 
 // --- Transit network -------------------------------------------------------
 
-export type LineMode = "bus" | "metro";
+export type LineMode = "metro" | "songthaew";
 
 export interface Stop {
   node: number; // graph node index
@@ -180,6 +180,7 @@ export interface SnapshotMeta {
     load: number;
     cap: number;
     crowd: number; // 1 (empty) .. 5 (full) — live crowding level
+    road: boolean; // true = road vehicle (songthaew truck), false = metro train
     color: [number, number, number];
   }[];
 }

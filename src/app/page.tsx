@@ -17,6 +17,8 @@ import {
   MAX_SNAP_M,
   MODE_PARAMS,
   PEOPLE_PER_AGENT,
+  ROUTE_TOOL,
+  SIM,
   TOOLS,
   type Tool,
 } from "@/lib/config";
@@ -54,6 +56,8 @@ export default function Page() {
   const { loaded, started, ready, meta, lines, playing, speed, goal } = sim;
 
   const [tool, setTool] = useState<Tool>("pan");
+  const [buildMode, setBuildMode] = useState<"metro" | "songthaew">("metro"); // which mode the build tools build
+  const [routeDraft, setRouteDraft] = useState<{ lon: number; lat: number }[]>([]); // songthaew route waypoints
   const [showDensity, setShowDensity] = useState(false); // 🔥 population-density heat overlay
   const [showAgents, setShowAgents] = useState(true); // 👣 commuter dots (walk/drive/ride) overlay
   const [showOD, setShowOD] = useState(true); // 🎯 travel-demand panel open/closed
@@ -174,20 +178,45 @@ export default function Page() {
   }, []);
 
   const pickTool = (t: Tool) => {
-    if (t === "track") {
-      // lay-track gets the first free palette colour for the new line
+    if (t === "track" || t === "route") {
+      // a new line gets the first free palette colour
       const used = new Set(lines.map((l) => l.color.join(",")));
       const free = LINE_COLORS.findIndex((c) => !used.has(c.rgb.join(",")));
       setColorIdx(free >= 0 ? free : 0);
       setSelectedLineId(null);
     }
     setChain([]);
+    setRouteDraft([]);
     setSnapWarn(false);
     setTool(t);
   };
   const cancelDraw = () => {
     setChain([]);
     setSnapWarn(false);
+    setTool("pan");
+  };
+  // switch which mode the build tools build (metro ↔ songthaew); reset drafts
+  const switchBuild = (m: "metro" | "songthaew") => {
+    setBuildMode(m);
+    setTool("pan");
+    setChain([]);
+    setRouteDraft([]);
+    setSnapWarn(false);
+    setSelectedLineId(null);
+  };
+  // 🛻 songthaew: add a free road waypoint, and finish the drawn route into a line
+  const addRoutePoint = (lon: number, lat: number) => setRouteDraft((p) => [...p, { lon, lat }]);
+  const finishRoute = () => {
+    if (routeDraft.length < 2) {
+      setRouteDraft([]);
+      return;
+    }
+    pushUndo();
+    sim.addLine(routeDraft, "songthaew", LINE_COLORS[colorIdx].rgb);
+    setRouteDraft([]);
+  };
+  const cancelRoute = () => {
+    setRouteDraft([]);
     setTool("pan");
   };
   // 🚉 place a standalone station (snapped to the nearest road), no rail yet
@@ -358,8 +387,8 @@ export default function Page() {
             <div className="gold-rule my-3.5" />
             <p className="text-[13px] leading-relaxed text-[var(--muted)]">
               {t(
-                "12,000 people move around the real city; longer trips they drive (jamming roads). Build Metro lines that beat driving.",
-                "ผู้คน 12,000 คนเดินทางในเมืองจริง การเดินทางไกลพวกเขาขับรถ (ทำให้รถติด) สร้างรถไฟฟ้าที่ดีกว่าการขับรถ",
+                `${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} people move around the real city; longer trips they drive (jamming roads). Build transit that beats driving.`,
+                `ผู้คน ${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} คนเดินทางในเมืองจริง การเดินทางไกลพวกเขาขับรถ (ทำให้รถติด) สร้างขนส่งที่ดีกว่าการขับรถ`,
               )}{" "}
               <b className="text-[var(--text)]">{t("Choose your goal:", "เลือกเป้าหมายของคุณ:")}</b>
             </p>
@@ -457,11 +486,14 @@ export default function Page() {
   // actually travel. Served fraction is graded against a ~60% "great network"
   // ceiling so an A is reachable but demanding.
   const odServed = meta?.odServedFrac ?? 0;
-  // DEMANDING: the OD "served" radius is tight (900 m), so a small metro serves
-  // only a handful of corridors and scores low; full demand credit needs ~60% of
-  // the city's travel corridors served — a serious multi-line network. Rider
-  // satisfaction (crowding + waits) caps the grade: an unhappy network can't be A.
-  const odScoreFrac = Math.min(1, odServed / 0.6);
+  // DEMANDING but FAIR (brutal-panel fix): a small metro still scores F, but a
+  // single well-placed line that actually serves real corridors now earns a C
+  // (it used to read F even while hauling 100k+/day — the grade lied vs the sim).
+  // Full demand credit needs ~42% of corridors served; an A still needs a real
+  // multi-line network. Rider satisfaction (crowding + waits) still caps the grade.
+  // concave curve: the FIRST well-placed line (which can only serve a slice of all
+  // corridors) is rewarded into C, while an A still needs a real multi-line network.
+  const odScoreFrac = Math.sqrt(Math.min(1, odServed / 0.45));
   const odUnmet = meta?.odUnmet ?? [];
   const odMet = meta?.odMet ?? [];
   const odServedPct = Math.round(odServed * 100);
@@ -475,7 +507,7 @@ export default function Page() {
   const grade =
     cityScore >= 82 ? { g: "A", c: "#2f8f6b", say: "World-class network 🎉" }
     : cityScore >= 66 ? { g: "B", c: "#4f9e78", say: "Strong — serve more corridors" }
-    : cityScore >= 46 ? { g: "C", c: "#c8962b", say: "Decent — link unmet demand" }
+    : cityScore >= 44 ? { g: "C", c: "#c8962b", say: "Decent — link unmet demand" }
     : cityScore >= 26 ? { g: "D", c: "var(--warn)", say: "Weak — connect where people travel" }
     : { g: "F", c: "var(--danger)", say: "Build metro along real demand" };
   const gradeGoalTarget = goal === "grade" ? DIFFICULTIES[difficulty].targets.grade?.scoreTarget ?? 82 : null;
@@ -537,9 +569,16 @@ export default function Page() {
         tool={tool}
         stations={stations}
         railDraft={railDraft}
+        routeDraft={routeDraft}
         onPlaceStation={placeStation}
         onChainStation={chainStation}
+        onAddRoutePoint={addRoutePoint}
         onDemolishStation={demolishStation}
+        onDemolishLine={(id) => {
+          pushUndo();
+          sim.removeLine(id);
+          setSelectedLineId(null);
+        }}
         selectedLineId={selectedLineId}
         onSelectLine={(id) => setSelectedLineId((cur) => (cur === id ? null : id))}
         center={CENTER}
@@ -605,7 +644,7 @@ export default function Page() {
             <div className="mt-2.5 border-t border-[var(--line)] pt-2.5">
               <div
                 className="flex items-center gap-2.5"
-                title={`City Score = (68% demand served + 18% coverage + 14% traffic relief) × satisfaction\nDemand served ${Math.round(odServed * 100)}% of travel corridors (need ~60% for full credit) → ${Math.round(odScoreFrac * 100)}/100\nCoverage ${Math.round(coverageFrac * 100)}% → ${Math.round(coverageScore * 100)}/100\nTraffic relief ${Math.round(trafficReliefFrac * 100)}/100 (traffic ${congestion}%)\nRider satisfaction ${meta?.satisfaction ?? 100}% (crowding + waits cap your grade)`}
+                title={`City Score = (68% demand served + 18% coverage + 14% traffic relief) × satisfaction\nDemand served ${Math.round(odServed * 100)}% of travel corridors (need ~42% for full credit) → ${Math.round(odScoreFrac * 100)}/100\nCoverage ${Math.round(coverageFrac * 100)}% → ${Math.round(coverageScore * 100)}/100\nTraffic relief ${Math.round(trafficReliefFrac * 100)}/100 (traffic ${congestion}%)\nRider satisfaction ${meta?.satisfaction ?? 100}% (crowding + waits cap your grade)`}
               >
                 <div
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg font-bold"
@@ -731,7 +770,7 @@ export default function Page() {
                       <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: rgb(l.color) }} />
                       <span className="w-9 shrink-0">{MODE_PARAMS[l.mode].label}</span>
                       <span className="flex-1 text-[var(--muted)]">
-                        {(l.totalLen / 1000).toFixed(1)} km · {l.mode === "metro" ? "🚆" : "🚌"}
+                        {(l.totalLen / 1000).toFixed(1)} km · {l.mode === "metro" ? "🚆" : "🛻"}
                         {l.fleet}
                       </span>
                       <span className="text-[10.5px]" style={{ color: crowded ? "var(--danger)" : "var(--muted)" }}>
@@ -751,12 +790,12 @@ export default function Page() {
                       <span style={{ color: (pl?.waiting ?? 0) > 50 ? "var(--danger)" : "var(--muted)" }}>
                         🧍 {ppl(pl?.waiting ?? 0)} {t("wait", "รอ")}
                       </span>
-                      <span className="text-[var(--muted)]">🚆 {ppl(pl?.riders ?? 0)} {t("riding", "บนรถ")}</span>
+                      <span className="text-[var(--muted)]">{l.mode === "metro" ? "🚆" : "🛻"} {ppl(pl?.riders ?? 0)} {t("riding", "บนรถ")}</span>
                     </div>
                     {sel && (
                       <div className="mt-1.5 flex flex-col gap-1.5 pl-[18px]">
                         <div className="flex items-center gap-1.5 text-[11px]">
-                          <span className="text-[var(--muted)]">{l.mode === "metro" ? "Trains" : "Buses"}</span>
+                          <span className="text-[var(--muted)]">{l.mode === "metro" ? t("Trains", "ขบวน") : t("Trucks", "คันรถ")}</span>
                           <button
                             className="rounded bg-[var(--fill-2)] px-1.5 leading-none hover:bg-[var(--fill-3)] disabled:opacity-30"
                             onClick={() => sim.setFleet(l.id, l.fleet - 1)}
@@ -1008,24 +1047,42 @@ export default function Page() {
         </div>
         <div className="mx-1 h-7 w-px bg-[var(--line)]" />
 
-        {/* the four tools — เลื่อนแผนที่ / วางสถานี / วางราง / รื้อถอน */}
+        {/* build-mode: 🚆 Metro trunk vs 🛻 Songthaew feeders */}
         <div className="flex items-center gap-1">
-          {TOOLS.map((t) => {
-            const on = tool === t.id;
-            // build discoverability: can't lay track until 2 stations exist; can't demolish with none
+          {(["metro", "songthaew"] as const).map((m) => (
+            <button
+              key={m}
+              className={`btn ${buildMode === m ? "btn-active" : ""}`}
+              onClick={() => switchBuild(m)}
+              disabled={!ready}
+              title={m === "metro"
+                ? "Metro — fast, traffic-immune trunk lines (place stations → lay track)"
+                : "Songthaew — cheap road-bound feeders; draw a route along the streets"}
+            >
+              {m === "metro" ? "🚆" : "🛻"} <span className="text-[11px]">{m === "metro" ? t("Metro", "รถไฟฟ้า") : t("Songthaew", "สองแถว")}</span>
+            </button>
+          ))}
+        </div>
+        <div className="mx-1 h-7 w-px bg-[var(--line)]" />
+
+        {/* tools — metro: pan/station/track/demolish · songthaew: pan/route */}
+        <div className="flex items-center gap-1">
+          {(buildMode === "metro" ? TOOLS : [TOOLS[0], ROUTE_TOOL, TOOLS[3]]).map((tl) => {
+            const on = tool === tl.id;
             const locked =
-              (t.id === "track" && stations.length < 2) || (t.id === "demolish" && stations.length === 0);
+              (tl.id === "track" && stations.length < 2) ||
+              (tl.id === "demolish" && stations.length === 0 && lines.length === 0);
             return (
               <button
-                key={t.id}
+                key={tl.id}
                 className="btn flex items-center gap-1"
-                onClick={() => pickTool(t.id)}
+                onClick={() => pickTool(tl.id)}
                 disabled={!ready || locked}
                 style={on ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
-                title={locked ? "Place 2+ stations first (🚉)" : `${t.en} — ${t.hint}`}
+                title={locked ? "Place 2+ stations first (🚉)" : `${tl.en} — ${tl.hint}`}
               >
-                <span>{t.icon}</span>
-                <span className="text-[11px]">{t.th}</span>
+                <span>{tl.icon}</span>
+                <span className="text-[11px]">{tl.th}</span>
               </button>
             );
           })}
@@ -1121,7 +1178,44 @@ export default function Page() {
         )}
 
         {tool === "demolish" && (
-          <span className="px-1 text-[11px] text-[var(--muted)]">คลิกสถานีเพื่อรื้อถอน · click a station to remove it (the line re-routes)</span>
+          <span className="px-1 text-[11px] text-[var(--muted)]">{t("Click a station (line re-routes) or a line/route to remove it", "คลิกสถานี (สายจะปรับเส้นทาง) หรือคลิกสาย/เส้นทางเพื่อรื้อถอน")}</span>
+        )}
+
+        {/* 🛻 draw a songthaew route — click waypoints along the roads, then Finish */}
+        {tool === "route" && (
+          <>
+            <div className="mx-1 h-7 w-px bg-[var(--line)]" />
+            <span
+              className="btn"
+              style={{ background: rgb(MODE_PARAMS.songthaew.color), color: "#fff", borderColor: "transparent", cursor: "default" }}
+              title={`Songthaew: from ฿${(ECONOMY.songthaew.build / 1e3).toFixed(0)}k, ${Math.round(MODE_PARAMS.songthaew.speed * 3.6)} km/h, cap ${MODE_PARAMS.songthaew.capacity}, fare ฿${MODE_PARAMS.songthaew.fare} · road-bound feeder`}
+            >
+              🛻 Songthaew
+            </span>
+            <span className="flex items-center gap-1">
+              {LINE_COLORS.map((c, i) => (
+                <button
+                  key={c.name}
+                  title={c.name}
+                  onClick={() => setColorIdx(i)}
+                  className="h-4 w-4 rounded-full"
+                  style={{ background: rgb(c.rgb), outline: i === colorIdx ? "2px solid var(--ink)" : "1px solid rgba(46,33,19,.28)" }}
+                />
+              ))}
+            </span>
+            <span className="px-1 text-[11px] text-[var(--muted)]">
+              {t("click road points · then Finish", "คลิกจุดบนถนน · แล้วกด Finish")} · {routeDraft.length}
+            </span>
+            <button className="btn" onClick={() => setRouteDraft((p) => p.slice(0, -1))} disabled={!routeDraft.length}>
+              ↶ Undo
+            </button>
+            <button className="btn btn-accent" onClick={finishRoute} disabled={routeDraft.length < 2}>
+              ✓ Finish
+            </button>
+            <button className="btn" onClick={cancelRoute}>
+              Cancel
+            </button>
+          </>
         )}
       </div>
 

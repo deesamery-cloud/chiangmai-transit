@@ -234,7 +234,7 @@ export function useSim(): UseSim {
       let result: TransitLine | null = null;
       setLines((prev) => {
         if (prev.filter((x) => x.mode === mode).length >= LINE_CAP[mode]) {
-          setNotice(`Max ${mode === "metro" ? "Metro" : "Bus"} lines reached (${LINE_CAP[mode]}).`);
+          setNotice(`Max ${mode === "metro" ? "Metro" : "Songthaew"} lines reached (${LINE_CAP[mode]}).`);
           return prev;
         }
         if (l.capex > budgetRef.current) {
@@ -265,7 +265,7 @@ export function useSim(): UseSim {
       let result: TransitLine | null = null;
       setLines((prev) => {
         if (prev.filter((x) => x.mode === mode).length >= LINE_CAP[mode]) {
-          setNotice(`Max ${mode === "metro" ? "Metro" : "Bus"} lines reached (${LINE_CAP[mode]}).`);
+          setNotice(`Max ${mode === "metro" ? "Metro" : "Songthaew"} lines reached (${LINE_CAP[mode]}).`);
           return prev;
         }
         if (l.capex > budgetRef.current) {

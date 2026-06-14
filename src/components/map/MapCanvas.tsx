@@ -15,7 +15,7 @@ import type { LineMode, ODCorridor, PlacedStation, PoiData, SnapshotMeta, Transi
 import type { SnapPair } from "@/lib/worker/useSim";
 import { MAP, type Tool } from "@/lib/config";
 
-const WIDTH: Record<LineMode, number> = { metro: 6, bus: 4 };
+const WIDTH: Record<LineMode, number> = { metro: 6, songthaew: 3.5 };
 
 // Population-density heat — a warm Lanna ramp (parchment → gold → cinnabar).
 const DENSITY_RANGE: [number, number, number][] = [
@@ -80,6 +80,22 @@ const trainIcon = (fill: string) =>
 const TRAIN: Record<number, { id: string; url: string; width: number; height: number }> = {};
 for (let c = 1; c <= 5; c++) TRAIN[c] = { id: `train-${c}`, url: trainIcon(CROWD_FILL[c]), width: 52, height: 24 };
 
+// songthaew "rod daeng" — a little covered pickup, crowd-coloured like the train,
+// same teak outline so road vehicles read as their own thing vs the metro capsule.
+const truckIcon = (fill: string) =>
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    `<svg xmlns='http://www.w3.org/2000/svg' width='40' height='26' viewBox='0 0 40 26'>` +
+      `<rect x='3' y='8' width='22' height='12' rx='2.5' fill='${fill}' stroke='#2e2113' stroke-width='2'/>` + // covered bed
+      `<rect x='5.5' y='6' width='17' height='2.5' rx='1.2' fill='#fdf6e8' opacity='0.85'/>` + // canopy rail
+      `<path d='M25 11 H31 L36 16 V20 H25 Z' fill='${fill}' stroke='#2e2113' stroke-width='2' stroke-linejoin='round'/>` + // cab
+      `<rect x='26.5' y='12.5' width='5.5' height='4' rx='1' fill='#fdf6e8' opacity='0.9'/>` + // windscreen
+      `<circle cx='10' cy='21' r='2.6' fill='#241a0e'/><circle cx='29' cy='21' r='2.6' fill='#241a0e'/>` + // wheels
+      `</svg>`,
+  );
+const TRUCK: Record<number, { id: string; url: string; width: number; height: number }> = {};
+for (let c = 1; c <= 5; c++) TRUCK[c] = { id: `truck-${c}`, url: truckIcon(CROWD_FILL[c]), width: 40, height: 26 };
+
 interface LineRender {
   id: string;
   path: [number, number][];
@@ -101,9 +117,12 @@ interface Props {
   tool: Tool;
   stations: PlacedStation[];
   railDraft: string[]; // ordered chained station ids
+  routeDraft: { lon: number; lat: number }[]; // songthaew route waypoints being drawn
   onPlaceStation: (lon: number, lat: number) => void;
   onChainStation: (id: string) => void;
+  onAddRoutePoint: (lon: number, lat: number) => void;
   onDemolishStation: (id: string) => void;
+  onDemolishLine: (id: string) => void;
   selectedLineId: string | null;
   onSelectLine: (id: string | null) => void;
   center: [number, number];
@@ -126,8 +145,10 @@ interface FrameState {
   tool: Tool;
   stations: PlacedStation[];
   railDraft: string[];
+  routeDraft: { lon: number; lat: number }[];
   deckClickAt: React.MutableRefObject<number>;
   onSelectLine: (id: string | null) => void;
+  onDemolishLine: (id: string) => void;
   showDensity: boolean;
   showAgents: boolean;
   presence: PresencePt[];
@@ -291,11 +312,17 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
               onClick: (info) => {
                 const o = info.object as LineRender | undefined;
                 if (!o) return false;
-                // only pan-mode clicks select a line; demolish acts on STATIONS,
-                // and station/track tools must let the station logic run
-                if (frameRef.current.tool === "pan") {
-                  frameRef.current.deckClickAt.current = performance.now();
-                  frameRef.current.onSelectLine(o.id);
+                const fr = frameRef.current;
+                // pan-mode click selects; demolish-mode click removes the line
+                // (this is how songthaew routes — which have no stations — get deleted)
+                if (fr.tool === "pan") {
+                  fr.deckClickAt.current = performance.now();
+                  fr.onSelectLine(o.id);
+                  return true;
+                }
+                if (fr.tool === "demolish") {
+                  fr.deckClickAt.current = performance.now();
+                  fr.onDemolishLine(o.id);
                   return true;
                 }
                 return false;
@@ -346,9 +373,10 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
           new IconLayer({
             id: "vehicles",
             data: f.vehicles,
-            getIcon: (v: SnapshotMeta["vehicles"][number]) => TRAIN[v.crowd] ?? TRAIN[1],
+            getIcon: (v: SnapshotMeta["vehicles"][number]) =>
+              v.road ? TRUCK[v.crowd] ?? TRUCK[1] : TRAIN[v.crowd] ?? TRAIN[1],
             getPosition: (v: SnapshotMeta["vehicles"][number]) => [v.lon, v.lat],
-            getSize: (v: SnapshotMeta["vehicles"][number]) => 18 + (v.crowd - 1) * 1.6,
+            getSize: (v: SnapshotMeta["vehicles"][number]) => (v.road ? 15 : 18) + (v.crowd - 1) * 1.6,
             sizeUnits: "pixels",
             sizeMinPixels: 12,
             billboard: true,
@@ -379,6 +407,41 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
             }),
           );
         }
+      }
+
+      // --- songthaew route draft (free waypoints being drawn) ------------
+      if (f.routeDraft.length) {
+        const rc = f.routeDraft.map((p) => [p.lon, p.lat] as [number, number]);
+        if (rc.length >= 2) {
+          layers.push(
+            new PathLayer({
+              id: "route-draft",
+              data: [{ path: rc }],
+              getPath: (d: { path: [number, number][] }) => d.path,
+              getColor: [214, 64, 52, 200], // rod-daeng red
+              getWidth: 3,
+              widthUnits: "pixels",
+              capRounded: true,
+              jointRounded: true,
+              parameters: { depthTest: false },
+            }),
+          );
+        }
+        layers.push(
+          new ScatterplotLayer({
+            id: "route-draft-pts",
+            data: rc,
+            getPosition: (d: [number, number]) => d,
+            getFillColor: [214, 64, 52, 255],
+            getLineColor: [255, 255, 255, 255],
+            stroked: true,
+            lineWidthUnits: "pixels",
+            getLineWidth: 1.5,
+            radiusUnits: "pixels",
+            getRadius: 4,
+            parameters: { depthTest: false },
+          }),
+        );
       }
 
       // --- placed stations as Lanna chedi markers (chained ones go teak) -
@@ -513,8 +576,8 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
 
 export default function MapCanvas(props: Props) {
   const {
-    graph, lines, vehicles, snapRef, tool, stations, railDraft,
-    onPlaceStation, onChainStation, onDemolishStation,
+    graph, lines, vehicles, snapRef, tool, stations, railDraft, routeDraft,
+    onPlaceStation, onChainStation, onAddRoutePoint, onDemolishStation, onDemolishLine,
     selectedLineId, onSelectLine, center,
     showDensity, showAgents, zones, pois, simTime, selectedOD,
   } = props;
@@ -524,7 +587,7 @@ export default function MapCanvas(props: Props) {
   const pressed = useRef(false);
   const deckClickAt = useRef(0);
   const [zoom, setZoom] = useState(12.6);
-  const drawActive = tool === "track" || tool === "station";
+  const drawActive = tool === "track" || tool === "station" || tool === "route";
 
   // road network as 2-pt segments, for the cyan buildable-roads overlay
   const roadSegs = useMemo<[number, number][][]>(() => {
@@ -583,12 +646,12 @@ export default function MapCanvas(props: Props) {
 
   const frameRef = useRef<FrameState>({
     lineKey, lineRenders, stopRenders, vehicles, snapRef, roadSegs, drawActive, tool,
-    stations, railDraft, deckClickAt, onSelectLine, showDensity, showAgents, presence, hour, hourBucket, zoom, selectedOD,
+    stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, showDensity, showAgents, presence, hour, hourBucket, zoom, selectedOD,
   });
   useEffect(() => {
     frameRef.current = {
       lineKey, lineRenders, stopRenders, vehicles, snapRef, roadSegs, drawActive, tool,
-      stations, railDraft, deckClickAt, onSelectLine, showDensity, showAgents, presence, hour, hourBucket, zoom, selectedOD,
+      stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, showDensity, showAgents, presence, hour, hourBucket, zoom, selectedOD,
     };
   });
 
@@ -596,7 +659,7 @@ export default function MapCanvas(props: Props) {
   const nearestStation = (lon: number, lat: number): PlacedStation | null => {
     const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
     let best: PlacedStation | null = null;
-    let bd = 18 * mpp;
+    let bd = 28 * mpp; // wider grab so extend doesn't miss the endpoint and spawn a phantom line
     for (const s of stations) {
       const d = haversine(lon, lat, s.lon, s.lat);
       if (d < bd) {
@@ -629,6 +692,8 @@ export default function MapCanvas(props: Props) {
           }
           const s = nearestStation(lng, lat);
           if (s) onChainStation(s.id);
+        } else if (tool === "route") {
+          onAddRoutePoint(lng, lat); // songthaew: add a free waypoint along the roads
         } else if (tool === "demolish") {
           const s = nearestStation(lng, lat);
           if (s) onDemolishStation(s.id);

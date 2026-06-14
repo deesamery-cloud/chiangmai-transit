@@ -15,7 +15,7 @@ export const SIM = {
 } as const;
 
 // Max lines the player may build per mode.
-export const LINE_CAP: Record<LineMode, number> = { bus: 20, metro: 8 };
+export const LINE_CAP: Record<LineMode, number> = { metro: 8, songthaew: 12 };
 
 // --- Population mix (residents · students · tourists) -----------------------
 // Chiang Mai's travellers are not one undifferentiated crowd. The sim's agents
@@ -119,22 +119,13 @@ export interface ModeParams {
   stopSpacingM: number;
 }
 
-// Two clearly-contrasted modes.
-//  Bus   – small, slow, road-bound (slows in traffic AND adds to it), cheap.
-//  Metro – big, fast, its own alignment (no traffic), but a pricier fare.
+// Two clearly-contrasted, COMPLEMENTARY modes:
+//  Metro     – big, fast, grade-separated (traffic-immune), pricey trunk backbone.
+//  Songthaew – tiny, slow, road-bound (slows in traffic AND adds to it), dense &
+//              dirt-cheap. A last-mile FEEDER that funnels riders into metro and
+//              covers thin areas; it crowds instantly on busy corridors, so it can
+//              never replace a trunk (that's the point — it complements metro).
 export const MODE_PARAMS: Record<LineMode, ModeParams> = {
-  bus: {
-    label: "Bus",
-    color: [240, 180, 40],
-    speed: 7, // ~25 km/h free-flow, less in traffic
-    capacity: 35,
-    headwaySec: 300,
-    dwellSec: 14,
-    fare: 15,
-    gradeSeparated: false, // shares the road, slows in & adds to traffic
-    flexible: false,
-    stopSpacingM: 500, // a stop roughly every 500 m
-  },
   metro: {
     label: "Metro",
     color: [170, 90, 235],
@@ -142,15 +133,27 @@ export const MODE_PARAMS: Record<LineMode, ModeParams> = {
     capacity: 200, // per train — popular lines crowd, so add trains / lines
     headwaySec: 200,
     dwellSec: 8,
-    fare: 40, // healthy revenue per rider (fare barely affects mode choice now)
+    fare: 40, // healthy revenue per rider
     gradeSeparated: true, // follows the road corridor but elevated/underground
     flexible: false,
     stopSpacingM: 900, // stations spaced wider
   },
+  songthaew: {
+    label: "Songthaew",
+    color: [214, 64, 52], // rod daeng — Chiang Mai red truck
+    speed: 7, // ~25 km/h free-flow, much less in traffic (road-bound)
+    capacity: 12, // a shared truck — overcrowds fast on a busy corridor
+    headwaySec: 240,
+    dwellSec: 8,
+    fare: 15, // cheap
+    gradeSeparated: false, // shares the road: slows in & adds to traffic
+    flexible: true, // hail/alight along the corridor (approximated by dense stops)
+    stopSpacingM: 320, // frequent hail points — strong walk-up coverage
+  },
 };
 
-// Metro-only game — the bus mode is retained in the model/types but not offered.
-export const MODE_ORDER: LineMode[] = ["metro"];
+// Both modes are now offered: metro trunk + songthaew feeders.
+export const MODE_ORDER: LineMode[] = ["metro", "songthaew"];
 
 // Player-selectable line colours (metro-style multi-colour networks).
 export const LINE_COLORS: { name: string; rgb: [number, number, number] }[] = [
@@ -177,19 +180,20 @@ export const ECONOMY: Record<
   LineMode,
   { build: number; perKm: number; perStop: number; opexPerKmDay: number; opexPerVehDay: number }
 > = {
-  bus: {
-    build: 80_000,
-    perKm: 12_000,
-    perStop: 2_500,
-    opexPerKmDay: 1_800,
-    opexPerVehDay: 1_200,
-  },
   metro: {
     build: 500_000,
     perKm: 90_000,
     perStop: 25_000,
     opexPerKmDay: 4_000,
     opexPerVehDay: 3_000,
+  },
+  songthaew: {
+    // dirt-cheap to deploy — quick coverage / feeders
+    build: 50_000,
+    perKm: 8_000,
+    perStop: 1_200,
+    opexPerKmDay: 1_000,
+    opexPerVehDay: 700,
   },
 };
 
@@ -390,14 +394,17 @@ export const MAX_SNAP_M = 200;
 //  station  วางสถานี     — click to drop stations (anchors); track auto-routes between them
 //  track    วางราง       — click or drag along roads to trace an alignment
 //  demolish รื้อถอน      — click a line to remove it
-export type Tool = "pan" | "station" | "track" | "demolish";
+export type Tool = "pan" | "station" | "track" | "demolish" | "route";
 
+// Metro build tools (station → track). Songthaew uses pan + route + demolish.
 export const TOOLS: { id: Tool; icon: string; th: string; en: string; hint: string }[] = [
   { id: "pan", icon: "🖐️", th: "เลื่อนแผนที่", en: "Pan", hint: "Drag to move the map" },
   { id: "station", icon: "🚉", th: "วางสถานี", en: "Place stations", hint: "Click to drop stations; track routes between them" },
   { id: "track", icon: "🛤️", th: "วางราง", en: "Lay track", hint: "Click or drag along roads to trace the line" },
-  { id: "demolish", icon: "🗑️", th: "รื้อถอน", en: "Demolish", hint: "Click a line to remove it" },
+  { id: "demolish", icon: "🗑️", th: "รื้อถอน", en: "Demolish", hint: "Click a line/route to remove it" },
 ];
+// Songthaew route tool (drawn freely along roads).
+export const ROUTE_TOOL = { id: "route" as Tool, icon: "🛻", th: "วาดเส้นทาง", en: "Draw route", hint: "Click points along roads to trace a songthaew route, then Finish" };
 
 // Map marker styling for the fine POI categories (and residential origins).
 export const POI_CAT_STYLE: Record<

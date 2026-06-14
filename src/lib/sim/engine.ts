@@ -438,7 +438,7 @@ export class SimEngine {
         if (!hadId.has(line.id)) {
           // a brand-new line: charge the build cost
           if (isFinite(this.budget)) this.budget -= line.capex * this.costMult;
-          this.events.push(`Built ${line.mode === "metro" ? "Metro" : "Bus"} line — ฿${money(line.capex)}`);
+          this.events.push(`Built ${line.mode === "metro" ? "Metro" : "Songthaew"} line — ฿${money(line.capex)}`);
         }
       }
     }
@@ -569,6 +569,9 @@ export class SimEngine {
       ...this.clusterHubs(this.hotelIdx, 4, meanW * 1.2),
       ...this.clusterHubs(this.eduIdx, 4, meanW * 1.0),
     ];
+    // dedupe origins by name too (no repeated labels in the corridor list)
+    const seenO = new Set<string>();
+    this.odO = this.odO.filter((h) => h.name && !seenO.has(h.name) && (seenO.add(h.name), true));
 
     // destinations: grid-cluster POI attraction; label each cell by its strongest
     // named non-leisure POI (recognisable anchors — temples, schools, markets…)
@@ -600,10 +603,19 @@ export class SimEngine {
     const cells: { c: number; w: number }[] = [];
     for (let c = 0; c < W.length; c++) if (W[c] > 0) cells.push({ c, w: W[c] });
     cells.sort((a, b) => b.w - a.w);
-    this.odD = cells.slice(0, OD.destHubs).map(({ c, w }) => {
+    // dedupe by NAME so the ~20 identical bank branches (and other repeated POI
+    // names) collapse to a single hub — the OD panel was listing the same place
+    // 20× as duplicate corridors. Keep the highest-weight cell for each name.
+    const seenD = new Set<string>();
+    this.odD = [];
+    for (const { c, w } of cells) {
+      if (this.odD.length >= OD.destHubs) break;
       const lon = sLon[c] / w, lat = sLat[c] / w;
-      return { lon, lat, node: g.nearestNode(lon, lat), name: bestName[c] || this.nearestPoiName(lon, lat), w };
-    });
+      const name = bestName[c] || this.nearestPoiName(lon, lat);
+      if (seenD.has(name)) continue;
+      seenD.add(name);
+      this.odD.push({ lon, lat, node: g.nearestNode(lon, lat), name, w });
+    }
 
     // gravity demand matrix O×D (skip walkable-short pairs)
     this.odPairs = [];
@@ -1197,6 +1209,7 @@ export class SimEngine {
           load: v.load,
           cap,
           crowd: crowdLevel(v.load, cap),
+          road: rt.line.roadbound,
           color: rt.line.color,
         });
         lineRiders += v.load;
@@ -1219,7 +1232,7 @@ export class SimEngine {
         if (!this.overcrowded.has(rt.line.id)) {
           this.overcrowded.add(rt.line.id);
           this.events.push(
-            `⚠ ${rt.line.mode === "metro" ? "Metro" : "Bus"} line crowded — ${lineWaiting} waiting. Raise frequency or add a line.`,
+            `⚠ ${rt.line.mode === "metro" ? "Metro" : "Songthaew"} line crowded — ${lineWaiting} waiting. Add vehicles or a line.`,
           );
         }
       } else {

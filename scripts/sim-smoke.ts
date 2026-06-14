@@ -35,8 +35,8 @@ const base = run("no transit", [], 2);
 
 // network: 2 bus + 2 metro lines (multiple per mode)
 const draws: { mode: LineMode; pts: { lon: number; lat: number }[] }[] = [
-  { mode: "bus", pts: [{ lon: 98.96, lat: 18.79 }, { lon: 98.985, lat: 18.788 }, { lon: 99.006, lat: 18.79 }] },
-  { mode: "bus", pts: [{ lon: 98.985, lat: 18.762 }, { lon: 98.986, lat: 18.79 }, { lon: 98.987, lat: 18.818 }] },
+  { mode: "songthaew", pts: [{ lon: 98.96, lat: 18.79 }, { lon: 98.985, lat: 18.788 }, { lon: 99.006, lat: 18.79 }] },
+  { mode: "songthaew", pts: [{ lon: 98.985, lat: 18.762 }, { lon: 98.986, lat: 18.79 }, { lon: 98.987, lat: 18.818 }] },
   { mode: "metro", pts: [{ lon: 98.95, lat: 18.762 }, { lon: 98.985, lat: 18.79 }, { lon: 99.02, lat: 18.818 }] },
   { mode: "metro", pts: [{ lon: 98.95, lat: 18.818 }, { lon: 98.985, lat: 18.79 }, { lon: 99.02, lat: 18.762 }] },
 ];
@@ -91,7 +91,7 @@ const day1 = econ.writeSnapshot(pos, st);
 
 // metro now follows roads (A* path has many intermediate nodes, not 3 anchors)
 const metroLine = lines.find((l) => l.mode === "metro")!;
-const busLine = lines.find((l) => l.mode === "bus")!;
+const sgtLine = lines.find((l) => l.mode === "songthaew")!;
 const metroFollowsRoads = metroLine.path.length > metroLine.stops.length + 2;
 
 // set fleet 1 -> 5 on the first line: vehicle count + opex must rise
@@ -115,7 +115,7 @@ const colourApplied = day1c.perLine[0].color.join(",") === "1,2,3";
 
 const ecoReport = {
   metro_roadbound: metroLine.roadbound,
-  bus_roadbound: busLine.roadbound,
+  songthaew_roadbound: sgtLine.roadbound,
   metro_pathNodes: metroLine.path.length,
   metro_stops: metroLine.stops.length,
   metroFollowsRoads,
@@ -181,6 +181,29 @@ const benchmark = {
 };
 console.log(JSON.stringify(benchmark, null, 2));
 
+// --- songthaew as a FEEDER: adding feeders to a metro trunk should not reduce
+// served corridors (it extends reach); a songthaew-only city stays weaker. ----
+const feedEng = new SimEngine(graph, z, p, AGENTS);
+const trunk = buildLine(graph, router, [{ lon: 98.95, lat: 18.79 }, { lon: 98.985, lat: 18.79 }, { lon: 99.02, lat: 18.79 }], "metro");
+feedEng.setNetwork(trunk ? [trunk] : []);
+const servedMetroOnly = feedEng.writeSnapshot(pos, st).odServedFrac;
+const feeder1 = buildLine(graph, router, [{ lon: 98.985, lat: 18.76 }, { lon: 98.985, lat: 18.79 }, { lon: 98.985, lat: 18.82 }], "songthaew");
+const feeder2 = buildLine(graph, router, [{ lon: 98.96, lat: 18.802 }, { lon: 98.985, lat: 18.795 }, { lon: 99.01, lat: 18.802 }], "songthaew");
+feedEng.setNetwork([trunk, feeder1, feeder2].filter(Boolean) as TransitLine[]);
+const servedWithFeeders = feedEng.writeSnapshot(pos, st).odServedFrac;
+const sgtEng = new SimEngine(graph, z, p, AGENTS);
+sgtEng.setNetwork([feeder1, feeder2].filter(Boolean) as TransitLine[]);
+const servedSgtOnly = sgtEng.writeSnapshot(pos, st).odServedFrac;
+console.log(JSON.stringify({
+  servedMetroOnly: +servedMetroOnly.toFixed(3),
+  servedWithFeeders: +servedWithFeeders.toFixed(3),
+  servedSongthaewOnly: +servedSgtOnly.toFixed(3),
+  songthaew_capacity: lines.find((l) => l.mode === "songthaew")!.capacity,
+}, null, 2));
+const feederOk =
+  servedWithFeeders >= servedMetroOnly - 1e-9 && // feeders never hurt the trunk's reach
+  servedSgtOnly < 0.6; // a songthaew-only net can't blanket the city (so it can't reach A alone)
+
 const ok =
   base.driving > 0 &&
   withNet.busRiders > 0 &&
@@ -192,13 +215,14 @@ const ok =
   day1.dailyRiders > 0 &&
   withNet.transferTrips > 0 &&
   metroLine.roadbound === false && // metro is grade-separated (traffic-immune)
-  busLine.roadbound === true &&
+  sgtLine.roadbound === true &&
   metroFollowsRoads && // metro routes along roads, not a straight line
   f1 === 1 &&
   f5 === 5 && // fleet count applied
   opexAfter > opexBefore && // more vehicles cost more
   colourApplied && // recolour propagated without rebuild
   odOk && // OD demand model live: corridors tracked, some met
-  demoOk; // demographic mix: residents + students + tourists all ride
+  demoOk && // demographic mix: residents + students + tourists all ride
+  feederOk; // songthaew feeds metro (served↑) and can't blanket the city alone
 console.log(ok ? "SMOKE: PASS ✅" : "SMOKE: FAIL ❌");
 process.exit(ok ? 0 : 1);
