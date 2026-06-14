@@ -1,0 +1,49 @@
+<!-- @dsCard group="Components" title="Buttons & tool chips" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lanna · Buttons</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Chonburi&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+:root{--bg:#efe3cf;--bg-2:#e1cfb1;--paper:#fbf7ef;--ink:#2e2113;--muted:#8a7559;
+  --border:rgba(46,33,19,.16);--gold:#c8962b;--gold-deep:#a8791c;--gold-soft:#e7c878;--accent-ink:#2e2113;
+  --sans:'Noto Sans Thai',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);color:var(--ink);min-height:100vh;padding:34px;
+  background:radial-gradient(125% 90% at 50% -10%,#f8efdc 0%,var(--bg) 48%,var(--bg-2) 100%);}
+.panel{background:rgba(251,247,239,.95);border:1px solid var(--border);border-radius:14px;padding:22px 24px;max-width:620px;
+  box-shadow:0 10px 30px rgba(74,50,22,.16)}
+.lbl{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:18px 0 10px}
+.lbl:first-child{margin-top:0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:9px;border:1px solid var(--border);
+  background:rgba(46,33,19,.04);color:var(--ink);font:500 13px/1 var(--sans);cursor:pointer}
+.btn-accent{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:var(--accent-ink);border-color:var(--gold-deep);font-weight:600;box-shadow:0 1px 0 rgba(255,255,255,.45) inset}
+.btn-active{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:var(--accent-ink);border-color:var(--gold-deep);font-weight:600}
+.btn[disabled]{opacity:.4}
+</style></head>
+<body>
+<div class="panel">
+  <div class="lbl">Buttons</div>
+  <div class="row">
+    <button class="btn">Secondary</button>
+    <button class="btn btn-accent">✓ Finish</button>
+    <button class="btn btn-active">60×</button>
+    <button class="btn" disabled>Disabled</button>
+    <button class="btn">↶</button>
+  </div>
+  <div class="lbl">Speed control</div>
+  <div class="row">
+    <button class="btn">▶</button>
+    <button class="btn">1×</button>
+    <button class="btn btn-active">60×</button>
+    <button class="btn">300×</button>
+    <button class="btn">1200×</button>
+  </div>
+  <div class="lbl">Tool palette — เลื่อนแผนที่ / วางสถานี / วางราง / รื้อถอน</div>
+  <div class="row">
+    <button class="btn btn-active">🖐️ เลื่อนแผนที่</button>
+    <button class="btn">🚉 วางสถานี</button>
+    <button class="btn">🛤️ วางราง</button>
+    <button class="btn">🗑️ รื้อถอน</button>
+  </div>
+</div>
+</body></html>

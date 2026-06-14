@@ -1,0 +1,58 @@
+<!-- @dsCard group="Patterns" title="In-game HUD — grade & goal" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lanna · HUD</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Chonburi&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+:root{--bg:#efe3cf;--bg-2:#e1cfb1;--paper:#fbf7ef;--ink:#2e2113;--muted:#8a7559;
+  --line:rgba(46,33,19,.14);--border:rgba(46,33,19,.16);--fill:rgba(46,33,19,.05);--fill-2:rgba(46,33,19,.09);
+  --gold:#c8962b;--gold-deep:#a8791c;--gold-soft:#e7c878;--accent-ink:#2e2113;--jade:#2f8f6b;--warn:#c26a2a;--danger:#b5462e;
+  --display:'Chonburi','Noto Sans Thai',Georgia,serif;--sans:'Noto Sans Thai',system-ui,sans-serif;--mono:ui-monospace,Menlo,monospace;}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);color:var(--ink);min-height:100vh;padding:34px;
+  background:radial-gradient(125% 90% at 50% -10%,#f8efdc 0%,var(--bg) 48%,var(--bg-2) 100%);}
+.panel{position:relative;width:264px;background:rgba(251,247,239,.96);border:1px solid var(--border);border-radius:14px;padding:14px 16px;
+  box-shadow:0 12px 32px rgba(74,50,22,.2),0 1px 0 rgba(255,255,255,.65) inset}
+.panel::before{content:"";position:absolute;top:0;left:14px;right:14px;height:2.5px;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--gold) 16%,var(--gold-soft) 50%,var(--gold) 84%,transparent)}
+.top{display:flex;justify-content:space-between;align-items:center}
+.wm{font-family:var(--display);font-size:15px;display:flex;align-items:center;gap:6px}
+.tag{font-size:10px;text-transform:uppercase;color:var(--muted)}
+.big{font-family:var(--mono);font-size:26px;margin-top:6px;display:flex;justify-content:space-between;align-items:flex-end}
+.budget{font-family:var(--mono);font-size:18px;color:var(--gold-deep)}
+.net{font-family:var(--mono);font-size:11px;color:var(--jade);text-align:right}
+.div{height:1px;background:var(--line);margin:10px 0}
+.grade{display:flex;align-items:center;gap:10px}
+.gchip{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;color:var(--accent-ink);background:var(--jade)}
+.row{display:flex;justify-content:space-between;font-size:12px}
+.bar{height:6px;border-radius:99px;background:var(--fill-2);overflow:hidden;margin:5px 0}
+.bar>i{display:block;height:100%;border-radius:99px}
+.say{font-size:11px;font-weight:600;color:var(--jade)}
+.goalbox{border:1px solid var(--line);background:var(--fill);border-radius:10px;padding:8px 10px;margin-top:12px}
+.mono{font-family:var(--mono)}
+.muted{color:var(--muted)}
+</style></head>
+<body>
+<div class="panel">
+  <div class="top">
+    <div class="wm"><svg width="16" height="16" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14.6" stroke="var(--gold)" stroke-width="1.5"/><path d="M16 4.2 L27.8 16 L16 27.8 L4.2 16 Z" stroke="var(--gold-deep)" stroke-width="1.1"/><path d="M16 8.5 q4.4 7.5 0 15 q-4.4 -7.5 0 -15z" fill="var(--gold)" opacity="0.9"/><circle cx="16" cy="16" r="2.1" fill="var(--paper)"/></svg> เชียงใหม่ Transit</div>
+    <div class="tag">🟢 Grade A · day 6</div>
+  </div>
+  <div class="big"><span>07:05</span><div><div class="budget">฿58.4M</div><div class="net">+฿808/day</div></div></div>
+  <div class="muted" style="font-size:10.5px">🌅 Rush hour</div>
+  <div class="div"></div>
+  <div class="grade">
+    <div class="gchip">B</div>
+    <div style="flex:1">
+      <div class="row"><span class="muted">City score ⓘ</span><span class="mono">61/100</span></div>
+      <div class="bar"><i style="width:61%;background:#4f9e78"></i></div>
+      <div class="say">Strong — keep extending</div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:8px"><span style="color:var(--jade)">🚆 18,400 riders/day <span class="muted">(24h)</span></span><span style="color:var(--warn)">🚗 Traffic 44%</span></div>
+  <div class="goalbox">
+    <div class="row"><span style="font-weight:600">🎯 🅰 Grade A City</span><span class="mono" style="color:var(--gold-deep)">85%</span></div>
+    <div class="bar"><i style="width:85%;background:var(--gold)"></i></div>
+    <div class="muted" style="font-size:11px">City Score 61 / 72 (B)</div>
+  </div>
+</div>
+</body></html>

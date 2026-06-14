@@ -1,0 +1,40 @@
+<!-- @dsCard group="Components" title="Metro train — live crowding 1–5" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lanna · Metro train crowding</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Chonburi&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+:root{--bg:#efe3cf;--bg-2:#e1cfb1;--paper:#fbf7ef;--ink:#2e2113;--muted:#8a7559;--border:rgba(46,33,19,.16);
+  --display:'Chonburi','Noto Sans Thai',Georgia,serif;--sans:'Noto Sans Thai',system-ui,sans-serif;}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);color:var(--ink);min-height:100vh;padding:30px;
+  background:radial-gradient(125% 90% at 50% -10%,#f8efdc 0%,var(--bg) 48%,var(--bg-2) 100%);}
+h1{font-family:var(--display);font-weight:400;font-size:22px;margin:0 0 2px}
+.sub{color:var(--muted);font-size:12px;margin-bottom:22px}
+.row{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end}
+.cell{background:var(--paper);border:1px solid var(--border);border-radius:12px;padding:16px 14px 12px;text-align:center;width:140px;
+  box-shadow:0 8px 22px rgba(74,50,22,.12)}
+.lvl{font-size:11px;color:var(--muted);margin-top:8px}
+.lvl b{color:var(--ink);font-size:13px}
+.legend{margin-top:22px;font-size:12.5px;color:var(--muted);max-width:560px;line-height:1.6}
+.legend b{color:var(--ink)}
+svg{display:block;margin:0 auto}
+</style></head>
+<body>
+<h1>เชียงใหม่ · Metro train</h1>
+<div class="sub">A realistic EMU car, recoloured live by how packed it is — 1 (empty) → 5 (full)</div>
+<div class="row" id="r"></div>
+<div class="legend"><b>How it works:</b> every train on the map is drawn in its crowding colour, updated as it
+picks up and drops riders along the line. A run of red (4–5) trains means a corridor is over capacity — add
+trains (fleet) or a parallel line. The rail underneath keeps the line's own colour, so identity + load both read at a glance.</div>
+<script>
+const FILL={1:"#2f8f6b",2:"#7fa53c",3:"#d9a441",4:"#c26a2a",5:"#b5462e"};
+const LABEL={1:"empty · ว่าง",2:"light",3:"half · ครึ่ง",4:"busy",5:"full · เต็ม"};
+const train=(fill)=>`<svg width="96" height="48" viewBox="0 0 60 30">
+  <path d="M7 5 H44 Q57 5 57 15 Q57 25 44 25 H7 Q3 25 3 21 V9 Q3 5 7 5 Z" fill="${fill}" stroke="#241a0e" stroke-width="2.4" stroke-linejoin="round"/>
+  <g fill="#fdf6e8"><rect x="9" y="11" width="7" height="8" rx="1.6"/><rect x="19" y="11" width="7" height="8" rx="1.6"/><rect x="29" y="11" width="7" height="8" rx="1.6"/>
+  <path d="M40 11 H46 Q52 12 53 15 Q52 18 46 19 H40 Z"/></g>
+  <rect x="6" y="4" width="40" height="2.4" rx="1.2" fill="#fdf6e8" opacity="0.7"/><circle cx="55" cy="15" r="1.6" fill="#fff7d6"/>
+</svg>`;
+r.innerHTML=[1,2,3,4,5].map(c=>`<div class="cell">${train(FILL[c])}<div class="lvl"><b>${c}/5</b> · ${LABEL[c]}</div></div>`).join("");
+</script>
+</body></html>

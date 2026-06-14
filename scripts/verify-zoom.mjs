@@ -1,0 +1,23 @@
+import { chromium } from "playwright-core";
+const URL = process.env.CM_URL || "http://localhost:3001";
+const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const browser = await chromium.launch({ headless: true, executablePath: CHROME,
+  args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--ignore-gpu-blocklist"] });
+const page = await (await browser.newContext({ viewport: { width: 1366, height: 850 } })).newPage();
+const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+await page.goto(URL, { waitUntil: "load", timeout: 45000 });
+await page.waitForFunction(() => document.body.innerText.includes("Choose a mode to begin"), { timeout: 45000 }).catch(() => {});
+await page.getByText("Sandbox").click();
+await page.waitForTimeout(4500);
+await page.getByRole("button", { name: "⏸" }).click().catch(() => {});
+await page.waitForTimeout(500);
+const box = await page.evaluate(() => { const r = document.querySelector("canvas").getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
+const cx = box.x + box.w * 0.5, cy = box.y + box.h * 0.5;
+await page.screenshot({ path: "/tmp/cm-z1-city.png" });
+await page.mouse.move(cx, cy);
+await page.mouse.dblclick(cx, cy); await page.waitForTimeout(1400);
+await page.screenshot({ path: "/tmp/cm-z2-mid.png" });
+await page.mouse.dblclick(cx, cy); await page.mouse.dblclick(cx, cy); await page.waitForTimeout(1600);
+await page.screenshot({ path: "/tmp/cm-z3-close.png" });
+console.log("ERRORS", JSON.stringify(errors.slice(0, 10)));
+await browser.close();

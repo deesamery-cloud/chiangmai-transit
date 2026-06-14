@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Lanna heritage theme — warm parchment, temple gold, cinnabar & jade.
+   A user-friendly, hand-crafted feel for the UI chrome; the map + rail stay
+   realistic. Most colour flows from these tokens, so the whole game restyles
+   centrally; semantic colours are tuned to read on a light cream surface.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  --bg: #efe3cf;            /* parchment base (start screen)            */
+  --bg-2: #e1cfb1;          /* deeper parchment, gradient bottom        */
+  --paper: #fbf7ef;         /* cream panel fill (solid)                 */
+  --panel: rgba(251, 247, 239, 0.95); /* translucent cream over the map */
+  --panel-solid: #fbf7ef;
+  --ink: #2e2113;           /* deep teak — primary text                 */
+  --text: #2e2113;
+  --muted: #8a7559;         /* warm brown-grey — secondary text         */
+  --line: rgba(46, 33, 19, 0.14);   /* hairline borders / rule          */
+  --border: rgba(46, 33, 19, 0.16);
+  --fill: rgba(46, 33, 19, 0.05);   /* faint inset fill                 */
+  --fill-2: rgba(46, 33, 19, 0.09); /* bar tracks, dividers, chips      */
+  --fill-3: rgba(46, 33, 19, 0.16); /* hover                            */
+  --gold: #c8962b;          /* temple gold — primary accent             */
+  --gold-deep: #a8791c;
+  --gold-soft: #e7c878;
+  --accent: #c8962b;
+  --accent-ink: #2e2113;    /* teak text drawn on gold / colour chips   */
+  --cinnabar: #b5462e;      /* Lanna red                                */
+  --danger: #b5462e;
+  --warn: #c26a2a;          /* terracotta — caution / traffic           */
+  --jade: #2f8f6b;          /* celadon green — success / on-transit     */
+  --ride: #2f8f6b;
+  --walk: #5e7390;          /* muted indigo — walking                   */
+  --wait: #b9851f;
+  --font-display: var(--font-chonburi), var(--font-thai), "Noto Sans Thai", Georgia, "Times New Roman", serif;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel-solid);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), var(--font-thai), "Noto Sans Thai", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* warm parchment backdrop for the start screen, with a faint Lanna lattice */
+.lanna-bg {
+  position: relative;
+  background: radial-gradient(125% 90% at 50% -10%, #f8efdc 0%, var(--bg) 48%, var(--bg-2) 100%);
+}
+.lanna-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'%3E%3Cg fill='none' stroke='%23a8791c' stroke-width='1'%3E%3Cpath d='M22 1 L43 22 L22 43 L1 22 Z'/%3E%3Ccircle cx='22' cy='22' r='3.2'/%3E%3Cpath d='M22 9 q4 6 0 13 q-4 -6 0 -13z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* floating panel — cream paper with a warm lift, reads clearly over the map */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(8px) saturate(1.04);
+  border-radius: 14px;
+  box-shadow:
+    0 10px 30px rgba(74, 50, 22, 0.18),
+    0 1px 0 rgba(255, 255, 255, 0.65) inset;
+}
+
+/* temple-gold accent rail along a panel's top edge */
+.panel-accent {
+  position: relative;
+}
+.panel-accent::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 2.5px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold) 16%, var(--gold-soft) 50%, var(--gold) 84%, transparent);
+}
+
+/* display wordmark — heritage serif for Latin, Thai falls back to Noto */
+.wordmark {
+  font-family: var(--font-display);
+  letter-spacing: 0.005em;
+  color: var(--ink);
+}
+
+/* Lanna divider — a gold hairline pierced by a center lozenge */
+.gold-rule {
+  position: relative;
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, var(--gold) 18%, var(--gold) 82%, transparent);
+  opacity: 0.75;
+}
+.gold-rule::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: var(--gold);
+  box-shadow: 0 0 0 2px var(--paper);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: rgba(46, 33, 19, 0.04);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
+  user-select: none;
+}
+.btn:hover {
+  background: rgba(46, 33, 19, 0.09);
+  border-color: rgba(46, 33, 19, 0.24);
+}
+.btn:active {
+  transform: translateY(0.5px);
+}
+.btn-accent {
+  background: linear-gradient(180deg, var(--gold-soft), var(--gold));
+  color: var(--accent-ink);
+  border-color: var(--gold-deep);
+  font-weight: 600;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset;
+}
+.btn-accent:hover {
+  background: linear-gradient(180deg, #f1d68d, var(--gold-deep));
+  border-color: var(--gold-deep);
+}
+.btn-active {
+  background: linear-gradient(180deg, var(--gold-soft), var(--gold));
+  color: var(--accent-ink);
+  border-color: var(--gold-deep);
+  font-weight: 600;
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

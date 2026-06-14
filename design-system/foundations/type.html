@@ -1,0 +1,39 @@
+<!-- @dsCard group="Foundations" title="Typography & wordmark" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lanna · Typography</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Chonburi&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+:root{--bg:#efe3cf;--bg-2:#e1cfb1;--paper:#fbf7ef;--ink:#2e2113;--muted:#8a7559;
+  --gold:#c8962b;--gold-deep:#a8791c;--border:rgba(46,33,19,.16);
+  --display:'Chonburi','Noto Sans Thai',Georgia,serif;
+  --sans:'Noto Sans Thai',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);color:var(--ink);min-height:100vh;padding:30px;
+  background:radial-gradient(125% 90% at 50% -10%,#f8efdc 0%,var(--bg) 48%,var(--bg-2) 100%);}
+.card{max-width:640px;background:var(--paper);border:1px solid var(--border);border-radius:14px;padding:24px 26px;
+  box-shadow:0 10px 30px rgba(74,50,22,.16)}
+.row{padding:12px 0;border-top:1px solid rgba(46,33,19,.1)}
+.row:first-of-type{border-top:0}
+.lbl{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.wordmark{font-family:var(--display);letter-spacing:.005em}
+.scale1{font-family:var(--display);font-size:30px}
+.h{font-weight:600;font-size:18px}
+.body{font-size:14px}
+.small{font-size:12px;color:var(--muted)}
+.mono{font:500 13px/1.4 ui-monospace,Menlo,monospace}
+.gd{color:var(--gold-deep)}
+</style></head>
+<body>
+<div class="card">
+  <div class="row">
+    <div class="lbl">Wordmark · display (Chonburi + Noto Sans Thai)</div>
+    <div class="wordmark" style="font-size:30px">เชียงใหม่ <span class="gd">Transit</span></div>
+    <div class="small" style="letter-spacing:.22em;text-transform:uppercase;margin-top:4px">Chiang Mai · ผังเมืองรถไฟฟ้า</div>
+  </div>
+  <div class="row"><div class="lbl">Display heading</div><div class="scale1">Build the city · สร้างเมือง</div></div>
+  <div class="row"><div class="lbl">Section heading · sans 600</div><div class="h">Your network · เครือข่ายของคุณ</div></div>
+  <div class="row"><div class="lbl">Body · sans 400</div><div class="body">12,000 people move around the real city; longer trips they drive. ผู้คนเดินทางในเมืองจริง</div></div>
+  <div class="row"><div class="lbl">Numeric · tabular mono</div><div class="mono">07:05 · ฿52.0M · +฿808/day · 12,000</div></div>
+  <div class="row"><div class="lbl">Caption · muted</div><div class="small">Pick a goal to begin · เลือกเป้าหมายเพื่อเริ่ม</div></div>
+</div>
+</body></html>

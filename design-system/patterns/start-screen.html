@@ -1,0 +1,57 @@
+<!-- @dsCard group="Patterns" title="Start screen — goals & difficulty" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lanna · Start screen</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Chonburi&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+:root{--bg:#efe3cf;--bg-2:#e1cfb1;--paper:#fbf7ef;--ink:#2e2113;--muted:#8a7559;
+  --border:rgba(46,33,19,.16);--fill:rgba(46,33,19,.05);
+  --gold:#c8962b;--gold-deep:#a8791c;--gold-soft:#e7c878;--accent-ink:#2e2113;
+  --display:'Chonburi','Noto Sans Thai',Georgia,serif;--sans:'Noto Sans Thai',system-ui,sans-serif;--mono:ui-monospace,Menlo,monospace;}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);color:var(--ink);min-height:100vh;padding:30px;display:flex;justify-content:center;align-items:flex-start;
+  position:relative;background:radial-gradient(125% 90% at 50% -10%,#f8efdc 0%,var(--bg) 48%,var(--bg-2) 100%);}
+body::before{content:"";position:absolute;inset:0;opacity:.07;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'%3E%3Cg fill='none' stroke='%23a8791c' stroke-width='1'%3E%3Cpath d='M22 1 L43 22 L22 43 L1 22 Z'/%3E%3Ccircle cx='22' cy='22' r='3.2'/%3E%3C/g%3E%3C/svg%3E");}
+.card{position:relative;width:560px;max-width:100%;background:rgba(251,247,239,.96);border:1px solid var(--border);border-radius:14px;padding:24px 26px;
+  box-shadow:0 14px 36px rgba(74,50,22,.2)}
+.card::before{content:"";position:absolute;top:0;left:14px;right:14px;height:2.5px;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--gold) 16%,var(--gold-soft) 50%,var(--gold) 84%,transparent)}
+.head{display:flex;align-items:center;gap:10px}
+.wm{font-family:var(--display);font-size:25px;line-height:1}
+.gd{color:var(--gold-deep)}
+.sub{font-size:9px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+.gold-rule{position:relative;height:1px;margin:16px 0;background:linear-gradient(90deg,transparent,var(--gold) 18%,var(--gold) 82%,transparent);opacity:.8}
+.gold-rule::after{content:"";position:absolute;left:50%;top:50%;width:7px;height:7px;transform:translate(-50%,-50%) rotate(45deg);background:var(--gold);box-shadow:0 0 0 2px var(--paper)}
+.intro{font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 12px}
+.intro b{color:var(--ink)}
+.seg{display:flex;gap:6px;margin-bottom:14px}
+.chip{flex:1;text-align:center;padding:7px;border-radius:9px;border:1px solid var(--border);background:rgba(46,33,19,.04);font-size:12px;cursor:pointer}
+.chip.on{background:linear-gradient(180deg,var(--gold-soft),var(--gold));color:var(--accent-ink);border-color:var(--gold-deep);font-weight:600}
+.goals{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.goal{border:1px solid var(--border);background:var(--fill);border-radius:12px;padding:12px 14px;cursor:pointer}
+.goal:hover{border-color:var(--gold);background:var(--paper)}
+.goal .t{font-size:13px;font-weight:600}
+.goal .tg{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--gold-deep);margin:3px 0}
+.goal .d{font-size:10.5px;color:var(--muted);line-height:1.4}
+.foot{text-align:center;font-size:11px;color:var(--muted);margin-top:14px}
+</style></head>
+<body>
+<div class="card">
+  <div class="head">
+    <svg width="34" height="34" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14.6" stroke="var(--gold)" stroke-width="1.5"/><path d="M16 4.2 L27.8 16 L16 27.8 L4.2 16 Z" stroke="var(--gold-deep)" stroke-width="1.1"/><path d="M16 8.5 q4.4 7.5 0 15 q-4.4 -7.5 0 -15z" fill="var(--gold)" opacity="0.9"/><circle cx="16" cy="16" r="2.1" fill="var(--paper)"/></svg>
+    <div><div class="wm">เชียงใหม่ <span class="gd">Transit</span></div><div class="sub">Chiang Mai · ผังเมืองรถไฟฟ้า</div></div>
+  </div>
+  <div class="gold-rule"></div>
+  <p class="intro">12,000 people move around the real city; longer trips they drive (jamming roads). Build Metro lines that beat driving. <b>Choose your goal:</b></p>
+  <div class="seg">
+    <div class="chip">🟢 Easy</div><div class="chip on">🟡 Medium</div><div class="chip">🟠 Challenge</div><div class="chip">🔴 Hard</div>
+  </div>
+  <div class="goals">
+    <div class="goal"><div class="t">🚗 Win the Cars</div><div class="tg">Traffic ≤ 35% + 25,000 riders</div><div class="d">Pull the city off the road — cut traffic and pack the trains.</div></div>
+    <div class="goal"><div class="t">💰 Transit Tycoon</div><div class="tg">Grow the fund to ฿60.0M</div><div class="d">Start lean and grow a profitable network into a fortune.</div></div>
+    <div class="goal"><div class="t">🅰 Grade A City</div><div class="tg">Reach City Score ≥ 72</div><div class="d">Cover the city and ease traffic until the network is world-class.</div></div>
+    <div class="goal"><div class="t">🆓 Free Build</div><div class="tg">No goal — sandbox</div><div class="d">Unlimited money, no goal — just build the city's dream network.</div></div>
+  </div>
+  <div class="foot">Pick a goal to begin · เลือกเป้าหมายเพื่อเริ่ม</div>
+</div>
+</body></html>

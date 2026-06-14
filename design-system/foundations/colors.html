@@ -1,0 +1,49 @@
+<!-- @dsCard group="Foundations" title="Color tokens" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lanna · Color tokens</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Chonburi&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+:root{
+  --bg:#efe3cf;--bg-2:#e1cfb1;--paper:#fbf7ef;--ink:#2e2113;--muted:#8a7559;
+  --line:rgba(46,33,19,.14);--border:rgba(46,33,19,.16);
+  --gold:#c8962b;--gold-deep:#a8791c;--gold-soft:#e7c878;
+  --cinnabar:#b5462e;--warn:#c26a2a;--jade:#2f8f6b;--walk:#5e7390;
+  --display:'Chonburi','Noto Sans Thai',Georgia,serif;
+  --sans:'Noto Sans Thai',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);color:var(--ink);min-height:100vh;padding:28px;
+  background:radial-gradient(125% 90% at 50% -10%,#f8efdc 0%,var(--bg) 48%,var(--bg-2) 100%);}
+h1{font-family:var(--display);font-weight:400;font-size:24px;margin:0 0 2px}
+.sub{color:var(--muted);font-size:12px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;max-width:760px}
+.sw{background:var(--paper);border:1px solid var(--border);border-radius:12px;overflow:hidden;
+  box-shadow:0 8px 22px rgba(74,50,22,.12)}
+.chip{height:64px}
+.meta{padding:8px 10px}
+.name{font-size:12px;font-weight:600}
+.hex{font:500 11px/1.4 ui-monospace,Menlo,monospace;color:var(--muted)}
+.role{font-size:10.5px;color:var(--muted)}
+</style></head>
+<body>
+<h1>เชียงใหม่ · Lanna palette</h1>
+<div class="sub">Chiang Mai Transit — color tokens</div>
+<div class="grid" id="g"></div>
+<script>
+const tokens=[
+ ["--ink / text","#2e2113","deep teak · primary text"],
+ ["--muted","#8a7559","secondary text"],
+ ["--paper","#fbf7ef","panel fill"],
+ ["--bg","#efe3cf","parchment base"],
+ ["--gold / accent","#c8962b","temple gold"],
+ ["--gold-deep","#a8791c","gold text / borders"],
+ ["--gold-soft","#e7c878","gold highlight"],
+ ["--jade / ride","#2f8f6b","success · on-transit"],
+ ["--cinnabar / danger","#b5462e","Lanna red · alerts"],
+ ["--warn","#c26a2a","terracotta · traffic"],
+ ["--walk","#5e7390","walking · indigo"],
+];
+g.innerHTML=tokens.map(([n,h,r])=>`<div class="sw"><div class="chip" style="background:${h}"></div>
+<div class="meta"><div class="name">${n}</div><div class="hex">${h}</div><div class="role">${r}</div></div></div>`).join("");
+</script>
+</body></html>

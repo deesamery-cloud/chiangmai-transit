@@ -1,0 +1,45 @@
+<!-- @dsCard group="Components" title="Panels & stats" -->
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lanna · Panels</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Chonburi&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+:root{--bg:#efe3cf;--bg-2:#e1cfb1;--paper:#fbf7ef;--ink:#2e2113;--muted:#8a7559;
+  --line:rgba(46,33,19,.14);--border:rgba(46,33,19,.16);--fill-2:rgba(46,33,19,.09);
+  --gold:#c8962b;--gold-deep:#a8791c;--gold-soft:#e7c878;--jade:#2f8f6b;--warn:#c26a2a;--walk:#5e7390;
+  --display:'Chonburi','Noto Sans Thai',Georgia,serif;--sans:'Noto Sans Thai',system-ui,sans-serif;
+  --mono:ui-monospace,Menlo,monospace;}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);color:var(--ink);min-height:100vh;padding:34px;display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;
+  background:radial-gradient(125% 90% at 50% -10%,#f8efdc 0%,var(--bg) 48%,var(--bg-2) 100%);}
+.panel{background:rgba(251,247,239,.95);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 10px 30px rgba(74,50,22,.18),0 1px 0 rgba(255,255,255,.65) inset}
+.panel-accent{position:relative}
+.panel-accent::before{content:"";position:absolute;top:0;left:14px;right:14px;height:2.5px;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--gold) 16%,var(--gold-soft) 50%,var(--gold) 84%,transparent)}
+.wm{font-family:var(--display);font-size:15px;display:flex;align-items:center;gap:6px}
+.stat{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:13px}
+.stat .l{color:var(--muted);display:flex;align-items:center;gap:6px}
+.dot{width:8px;height:8px;border-radius:50%}
+.v{font-family:var(--mono);font-weight:500}
+.hr{height:1px;background:var(--line);margin:6px 0}
+.lbl{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+</style></head>
+<body>
+<div class="panel panel-accent" style="width:240px;padding:16px 18px">
+  <div class="lbl" style="margin-bottom:8px">panel · panel-accent</div>
+  <div class="wm"><svg width="16" height="16" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14.6" stroke="var(--gold)" stroke-width="1.5"/><path d="M16 4.2 L27.8 16 L16 27.8 L4.2 16 Z" stroke="var(--gold-deep)" stroke-width="1.1"/><path d="M16 8.5 q4.4 7.5 0 15 q-4.4 -7.5 0 -15z" fill="var(--gold)" opacity="0.9"/><circle cx="16" cy="16" r="2.1" fill="var(--paper)"/></svg> เชียงใหม่ Transit</div>
+  <div style="font-family:var(--mono);font-size:24px;margin-top:8px">07:05</div>
+  <div style="font-size:11px;color:var(--muted)">🌅 Rush hour</div>
+</div>
+
+<div class="panel" style="width:230px;padding:16px 18px">
+  <div class="lbl">Stats panel</div>
+  <div class="stat"><span class="l">Commuters</span><span class="v">12,000</span></div>
+  <div class="stat"><span class="l"><span class="dot" style="background:var(--walk)"></span>Walking</span><span class="v">38</span></div>
+  <div class="stat"><span class="l"><span class="dot" style="background:var(--warn)"></span>Driving</span><span class="v">2,312</span></div>
+  <div class="stat"><span class="l"><span class="dot" style="background:var(--jade)"></span>On transit</span><span class="v" style="color:var(--jade)">214</span></div>
+  <div class="hr"></div>
+  <div class="stat"><span class="l">Traffic</span><span class="v" style="color:var(--warn)">48%</span></div>
+  <div class="stat"><span class="l">Coverage</span><span class="v">8%</span></div>
+</div>
+</body></html>
