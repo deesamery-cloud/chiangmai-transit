@@ -878,7 +878,25 @@ export default function Page() {
                   <div key={l.id} className={`rounded-md px-1.5 py-1 ${sel ? "bg-[var(--fill-2)]" : ""}`}>
                     <button
                       className="flex w-full items-center gap-2 text-left text-[12px]"
-                      onClick={() => setSelectedLineId((c) => (c === l.id ? null : l.id))}
+                      title={t("Edit this line — add vehicles, fare, recolour, remove", "แก้ไขสายนี้ — เพิ่มขบวน ค่าโดยสาร เปลี่ยนสี รื้อถอน")}
+                      onClick={() => {
+                        // come back and edit a line ANY time, not just right after building.
+                        // the strip is only actionable in Pan (it's gated off during build
+                        // tools), so "active" = selected AND already in Pan. Clicking an
+                        // inactive row always selects it + drops to Pan + clears any draft,
+                        // so the ＋ vehicle / fare / remove strip reliably appears (rather than
+                        // toggling the still-selected-but-hidden line off).
+                        const active = selectedLineId === l.id && tool === "pan";
+                        if (active) {
+                          setSelectedLineId(null);
+                        } else {
+                          setSelectedLineId(l.id);
+                          setTool("pan");
+                          setChain([]);
+                          setRouteDraft([]);
+                          setSnapWarn(false);
+                        }
+                      }}
                     >
                       <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: rgb(l.color) }} />
                       <span className="w-9 shrink-0">{MODE_PARAMS[l.mode].label}</span>
