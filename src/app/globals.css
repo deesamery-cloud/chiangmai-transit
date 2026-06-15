@@ -55,6 +55,29 @@
   filter: saturate(0.6) brightness(1.05);
 }
 
+/* ── Motion vocabulary (game-feel pass) ───────────────────────────────────
+   A small shared set so accomplishment/attention moments breathe instead of
+   hard-cutting. Respects reduced-motion. */
+@keyframes cm-pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(181, 70, 46, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(181, 70, 46, 0.55); }
+}
+@keyframes cm-pop-in {
+  0% { opacity: 0; transform: scale(0.92) translateY(6px); }
+  60% { opacity: 1; transform: scale(1.02) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes cm-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.cm-glow-pulse { animation: cm-pulse-glow 1.25s ease-in-out infinite; }
+.cm-pop-in { animation: cm-pop-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.cm-fade-in { animation: cm-fade-in 0.25s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .cm-glow-pulse, .cm-pop-in, .cm-fade-in { animation: none; }
+}
+
 html,
 body {
   height: 100%;

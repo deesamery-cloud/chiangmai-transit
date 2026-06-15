@@ -556,6 +556,19 @@ export default function Page() {
     : cityScore >= 26 ? { g: "D", c: "var(--warn)", say: "Weak — connect where people travel" }
     : { g: "F", c: "var(--danger)", say: "Build metro along real demand" };
   const gradeGoalTarget = goal === "grade" ? DIFFICULTIES[difficulty].targets.grade?.scoreTarget ?? 82 : null;
+  // inline grade breakdown — turn the opaque City Score into a visible equation:
+  // three weighted components + the single biggest opportunity wired to an action.
+  const scoreComps = [
+    { key: "demand", label: t("Demand served", "อุปสงค์ที่เสิร์ฟ"), frac: odScoreFrac, w: 68, c: "var(--ride)" },
+    { key: "coverage", label: t("Coverage", "ความครอบคลุม"), frac: coverageScore, w: 18, c: "var(--accent)" },
+    { key: "relief", label: t("Traffic relief", "ลดรถติด"), frac: trafficReliefFrac, w: 14, c: "var(--warn)" },
+  ];
+  // biggest weighted shortfall = where the next click pays off most
+  const scoreOpp = scoreComps.reduce((a, b) => (b.w * (1 - b.frac) > a.w * (1 - a.frac) ? b : a));
+  const scoreOppHint =
+    scoreOpp.key === "demand" ? (odUnmet.length > 0 ? t(" — serve the red corridors in 🎯 Demand", " — เสิร์ฟเส้นสีแดงใน 🎯 อุปสงค์") : "")
+    : scoreOpp.key === "coverage" ? t(" — extend lines into new areas", " — ขยายสายไปพื้นที่ใหม่")
+    : t(" — pull cars off the busy roads", " — ดึงรถออกจากถนนที่แน่น");
   // crowding — the central pressure: full lines leave riders stuck (they give up
   // and drive). Relieve by adding trains (fleet) or a parallel line.
   const waiting = meta?.waiting ?? 0;
@@ -728,6 +741,28 @@ export default function Page() {
                   </div>
                 </div>
               </div>
+              {/* the score as a visible equation — three weighted bars + biggest opportunity */}
+              {lines.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {scoreComps.map((c) => {
+                    const isOpp = c.key === scoreOpp.key;
+                    return (
+                      <div key={c.key} className="flex items-center gap-1.5 text-[10.5px]">
+                        <span className="w-[74px] shrink-0" style={{ color: isOpp ? "var(--text)" : "var(--muted)", fontWeight: isOpp ? 600 : 400 }}>
+                          {c.label}
+                        </span>
+                        <span className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--fill-2)]">
+                          <span className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500" style={{ width: `${Math.round(c.frac * 100)}%`, background: c.c }} />
+                        </span>
+                        <span className="w-7 shrink-0 text-right font-mono text-[var(--muted)]">·{c.w}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="text-[10.5px]" style={{ color: "var(--accent)" }}>
+                    ↗ {t("Biggest gain", "เพิ่มคะแนนได้มากสุด")}: <b>{scoreOpp.label}</b>{scoreOppHint}
+                  </div>
+                </div>
+              )}
               <div className="mt-2 flex items-center justify-between text-[12px]">
                 <span style={{ color: "var(--ride)" }} title="boardings over the last 24 sim-hours (rolling), at city scale">
                   🚆 {ppl(meta.dailyRiders)} {t("riders/day", "คน/วัน")} <span className="text-[var(--muted)]">(24h)</span>
@@ -1230,12 +1265,11 @@ export default function Page() {
             />
             {/* PROMINENT add-vehicle — same visual weight as 🚉 วางสถานี / 🛤️ วางราง */}
             <button
-              className="btn btn-accent flex items-center gap-1.5"
+              className={`btn btn-accent flex items-center gap-1.5${selCrowded && selLine.fleet < MAX_FLEET ? " cm-glow-pulse" : ""}`}
               style={{
                 padding: "8px 14px",
                 fontSize: "13px",
                 fontWeight: 700,
-                boxShadow: selCrowded && selLine.fleet < MAX_FLEET ? "0 0 0 3px rgba(181,70,46,.5)" : undefined,
               }}
               onClick={() => sim.setFleet(selLine.id, selLine.fleet + 1)}
               disabled={selLine.fleet >= MAX_FLEET}
@@ -1337,26 +1371,29 @@ export default function Page() {
 
       {/* 🏆 win overlay */}
       {showWin && goalDef && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-[rgba(42,28,14,0.5)]">
-          <div className="panel px-8 py-6 text-center" style={{ borderColor: "var(--ride)" }}>
+        <div className="cm-fade-in absolute inset-0 z-40 flex items-center justify-center bg-[rgba(42,28,14,0.5)]">
+          <div className="panel cm-pop-in px-8 py-6 text-center" style={{ borderColor: "var(--ride)" }}>
             <div className="text-4xl">🏆</div>
             <div className="mt-2 text-lg font-semibold" style={{ color: "var(--ride)" }}>
               {goal ? t(goalDef.winTitle, goalTh[goal].win) : goalDef.winTitle}
             </div>
             <div className="mt-1 text-[12px] text-[var(--muted)]">
-              Reached in {meta?.day ?? 0} days · {fmt(meta?.dailyRiders ?? 0)} riders/day · grade {grade.g}
+              {t(
+                `Reached in ${meta?.day ?? 0} days · ${fmt(meta?.dailyRiders ?? 0)} riders/day · grade ${grade.g}`,
+                `สำเร็จใน ${meta?.day ?? 0} วัน · ${fmt(meta?.dailyRiders ?? 0)} คน/วัน · เกรด ${grade.g}`,
+              )}
             </div>
             <div className="mt-3 tracking-widest text-[var(--accent)]">★ ★ ★</div>
             <div className="mt-4 flex justify-center gap-2">
               <button className="btn btn-accent" onClick={() => setShowWin(false)}>
-                Keep playing
+                {t("Keep playing", "เล่นต่อ")}
               </button>
               <button
                 className="btn"
-                title="Back to the goal menu — your build is autosaved, Resume it anytime"
+                title={t("Back to the goal menu — your build is autosaved, Resume it anytime", "กลับไปเมนูเป้าหมาย — งานถูกบันทึกอัตโนมัติ กลับมาเล่นต่อได้")}
                 onClick={() => window.location.reload()}
               >
-                New goal
+                {t("New goal", "เป้าหมายใหม่")}
               </button>
             </div>
           </div>
