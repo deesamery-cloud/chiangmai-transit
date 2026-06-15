@@ -220,9 +220,14 @@ export default function Page() {
       return;
     }
     pushUndo();
-    sim.addLine(routeDraft, "songthaew", LINE_COLORS[colorIdx].rgb);
+    const nl = sim.addLine(routeDraft, "songthaew", LINE_COLORS[colorIdx].rgb);
     playSfx("clack");
     setRouteDraft([]);
+    // auto-select the new feeder + drop to pan so the ＋ Add songthaew strip appears
+    if (nl) {
+      setSelectedLineId(nl.id);
+      setTool("pan");
+    }
   };
   const cancelRoute = () => {
     setRouteDraft([]);
@@ -298,6 +303,7 @@ export default function Page() {
     pushUndo();
     const c0 = ids[0], cN = ids[ids.length - 1];
     let extended = false;
+    let builtId: string | null = null;
     for (const line of lines) {
       const sids = line.stationIds;
       if (!sids || sids.length < 2) continue;
@@ -312,17 +318,27 @@ export default function Page() {
         if (sts.length >= 2) {
           sim.replaceLineFromStations(line.id, sts, line.color, line.fleet);
           extended = true;
+          builtId = line.id;
         }
         break;
       }
     }
     if (!extended) {
       const chosen = resolve(ids, stations);
-      if (chosen.length >= 2) sim.addLineFromStations(chosen, mode, LINE_COLORS[colorIdx].rgb);
+      if (chosen.length >= 2) {
+        const nl = sim.addLineFromStations(chosen, mode, LINE_COLORS[colorIdx].rgb);
+        if (nl) builtId = nl.id;
+      }
     }
     playSfx("clack");
     setChain([]);
     setSnapWarn(false);
+    // auto-select the line you just built + drop to pan, so the bottom edit
+    // strip (＋ Add train / fare / remove) appears immediately
+    if (builtId) {
+      setSelectedLineId(builtId);
+      setTool("pan");
+    }
   };
   // Demolish ONE station: drop it, and re-route any line that used it through
   // the remaining stations (or remove the line if it falls below 2 stations).

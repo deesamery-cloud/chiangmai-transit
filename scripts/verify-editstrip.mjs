@@ -17,21 +17,18 @@ for(const[x,y]of pts){await page.mouse.click(x,y);await page.waitForTimeout(140)
 await page.getByRole("button",{name:/วางราง/}).click();
 for(const[x,y]of pts){await page.mouse.click(x,y);await page.waitForTimeout(130);}
 const fin=page.getByRole("button",{name:/✓ Finish/}); if(await fin.isEnabled().catch(()=>false))await fin.click();
-await page.getByRole("button",{name:/เลื่อนแผนที่/}).click();
 await page.waitForTimeout(1000);
-console.log("STRIP_BEFORE_SELECT", /＋ (Train|ขบวน|Songthaew|สองแถว)/.test(await txt()) ? "shown" : "hidden(expected)");
-// select the line via its network-list row (the one with 'km')
-await page.getByRole("button",{name:/km/}).first().click();
-await page.waitForTimeout(500);
+// NEW: finishing a line now auto-selects it + drops to pan → strip shows with NO manual click
 let b=await txt();
+console.log("AUTO_STRIP_AFTER_FINISH", /＋ (Add train|เพิ่มขบวน|Add songthaew|เพิ่มสองแถว)/.test(b) ? "✓ appears automatically" : "✗ NOT shown");
 console.log("EDIT_STRIP_SHOWN", /＋ (Add train|เพิ่มขบวน|Add songthaew|เพิ่มสองแถว)/.test(b) ? "✓ bottom strip" : "✗");
-console.log("FLEET_BEFORE", (b.match(/🚆(\d)\/5/)||[])[1]);
+console.log("FLEET_BEFORE", (b.match(/(\d)\/5\b/)||[])[1]);
 await page.getByRole("button",{name:/＋ (Add train|เพิ่มขบวน|Add songthaew|เพิ่มสองแถว)/}).click();
 await page.waitForTimeout(400);
 await page.getByRole("button",{name:/＋ (Add train|เพิ่มขบวน|Add songthaew|เพิ่มสองแถว)/}).click();
 await page.waitForTimeout(700);
 b=await txt();
-console.log("FLEET_AFTER", (b.match(/🚆(\d)\/5/)||[])[1], "(expect higher)");
+console.log("FLEET_AFTER", (b.match(/(\d)\/5\b/)||[])[1], "(expect higher)");
 console.log("FARE_IN_STRIP", /Fare|ค่าโดยสาร/.test(b) && /฿\d/.test(b) ? "✓" : "✗", "REMOVE", /Remove|รื้อถอน/.test(b)?"✓":"✗");
 await page.screenshot({ path: "/tmp/cm-editstrip.png" });
 console.log("ERRORS", JSON.stringify(errors.slice(0,6)));

@@ -87,6 +87,11 @@ export function useSim(): UseSim {
   const [goal, setGoal] = useState<GoalKind | null>(null);
   const [meta, setMeta] = useState<SnapshotMeta | null>(null);
   const [lines, setLines] = useState<TransitLine[]>([]);
+  // keep a synchronous mirror of `lines` so add* can guard + return the new line
+  // immediately (the setLines updater runs lazily, so its result can't be returned)
+  useEffect(() => {
+    linesRef.current = lines;
+  }, [lines]);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeedState] = useState(60);
   const [graph, setGraphState] = useState<Graph | null>(null);
@@ -102,6 +107,7 @@ export function useSim(): UseSim {
   const dataRef = useRef<{ g: GraphData; z: ZoneData; p: PoiData } | null>(null);
   const snapRef = useRef<SnapPair>({ A: null, B: null });
   const budgetRef = useRef<number>(Infinity);
+  const linesRef = useRef<TransitLine[]>([]);
   const throttle = useRef(0);
 
   useEffect(() => {
@@ -232,24 +238,21 @@ export function useSim(): UseSim {
         setNotice("Couldn't route that line — try points along connected streets.");
         return null;
       }
-      let result: TransitLine | null = null;
+      // synchronous guards (read refs) so we can return the new line immediately
+      if (linesRef.current.filter((x) => x.mode === mode).length >= LINE_CAP[mode]) {
+        setNotice(`Max ${mode === "metro" ? "Metro" : "Songthaew"} lines reached (${LINE_CAP[mode]}).`);
+        return null;
+      }
+      if (l.capex > budgetRef.current) {
+        setNotice(`Not enough budget — this ${mode} line costs ฿${(l.capex / 1e6).toFixed(1)}M.`);
+        return null;
+      }
       setLines((prev) => {
-        if (prev.filter((x) => x.mode === mode).length >= LINE_CAP[mode]) {
-          setNotice(`Max ${mode === "metro" ? "Metro" : "Songthaew"} lines reached (${LINE_CAP[mode]}).`);
-          return prev;
-        }
-        if (l.capex > budgetRef.current) {
-          setNotice(
-            `Not enough budget — this ${mode} line costs ฿${(l.capex / 1e6).toFixed(1)}M.`,
-          );
-          return prev;
-        }
-        result = l;
         const next = [...prev, l];
         send({ type: "setNetwork", lines: next });
         return next;
       });
-      return result;
+      return l;
     },
     [send],
   );
@@ -263,22 +266,21 @@ export function useSim(): UseSim {
         setNotice("Couldn't route rail between those stations — pick stations on connected streets.");
         return null;
       }
-      let result: TransitLine | null = null;
+      // synchronous guards (read refs) so we can return the new line immediately
+      if (linesRef.current.filter((x) => x.mode === mode).length >= LINE_CAP[mode]) {
+        setNotice(`Max ${mode === "metro" ? "Metro" : "Songthaew"} lines reached (${LINE_CAP[mode]}).`);
+        return null;
+      }
+      if (l.capex > budgetRef.current) {
+        setNotice(`Not enough budget — this ${mode} line costs ฿${(l.capex / 1e6).toFixed(1)}M.`);
+        return null;
+      }
       setLines((prev) => {
-        if (prev.filter((x) => x.mode === mode).length >= LINE_CAP[mode]) {
-          setNotice(`Max ${mode === "metro" ? "Metro" : "Songthaew"} lines reached (${LINE_CAP[mode]}).`);
-          return prev;
-        }
-        if (l.capex > budgetRef.current) {
-          setNotice(`Not enough budget — this ${mode} line costs ฿${(l.capex / 1e6).toFixed(1)}M.`);
-          return prev;
-        }
-        result = l;
         const next = [...prev, l];
         send({ type: "setNetwork", lines: next });
         return next;
       });
-      return result;
+      return l;
     },
     [send],
   );
