@@ -71,11 +71,26 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+@keyframes cm-tick {
+  0% { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+@keyframes cm-flash-up {
+  0% { color: var(--jade); transform: scale(1.22); }
+  100% { color: var(--text); transform: scale(1); }
+}
+@keyframes cm-flash-down {
+  0% { color: var(--danger); transform: scale(0.86); }
+  100% { color: var(--text); transform: scale(1); }
+}
 .cm-glow-pulse { animation: cm-pulse-glow 1.25s ease-in-out infinite; }
 .cm-pop-in { animation: cm-pop-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .cm-fade-in { animation: cm-fade-in 0.25s ease-out both; }
+.cm-tick { display: inline-block; animation: cm-tick 0.35s ease-out; }
+.cm-flash-up { display: inline-block; animation: cm-flash-up 0.55s ease-out; }
+.cm-flash-down { display: inline-block; animation: cm-flash-down 0.55s ease-out; }
 @media (prefers-reduced-motion: reduce) {
-  .cm-glow-pulse, .cm-pop-in, .cm-fade-in { animation: none; }
+  .cm-glow-pulse, .cm-pop-in, .cm-fade-in, .cm-tick, .cm-flash-up, .cm-flash-down { animation: none; }
 }
 
 html,
@@ -199,4 +214,99 @@ body {
 .btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ── Distinct control grammars (signifier pass) ───────────────────────────
+   Gold (.btn-active / inline gold) is reserved for the ARMED build tool — the
+   one control that changes what a map click does. The other two families get
+   their own look so "what will my click do?" is never ambiguous. */
+
+/* Segmented control — pick exactly one of N (time speed, build mode). The
+   selected segment is a solid teak fill, never gold. */
+.segmented {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--fill);
+}
+.segmented > .seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 11px;
+  min-height: 34px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.segmented > .seg + .seg {
+  border-left: 1px solid var(--line);
+}
+.segmented > .seg:hover:not(:disabled):not(.seg-on) {
+  background: var(--fill-2);
+  color: var(--ink);
+}
+.segmented > .seg-on {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+}
+.segmented > .seg:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* View toggle — an on/off switch for a map overlay. Jade + filled dot when on,
+   hollow outline when off. Never gold. */
+.vtoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  min-height: 34px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--fill);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.vtoggle::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1.5px solid var(--muted);
+  background: transparent;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.vtoggle:hover {
+  border-color: rgba(46, 33, 19, 0.24);
+  color: var(--ink);
+}
+.vtoggle-on {
+  border-color: var(--jade);
+  color: var(--ink);
+  background: rgba(47, 143, 107, 0.12);
+}
+.vtoggle-on::before {
+  background: var(--jade);
+  border-color: var(--jade);
+}
+
+/* Touch ergonomics — comfortable 44px targets on coarse pointers (mobile). */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; padding: 10px 14px; }
+  .segmented > .seg { min-height: 44px; padding: 10px 13px; }
+  .vtoggle { min-height: 44px; padding: 10px 13px; }
 }

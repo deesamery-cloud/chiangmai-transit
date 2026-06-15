@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Noto_Sans_Thai, Chonburi } from "next/font/google";
 import "./globals.css";
 
@@ -31,6 +31,15 @@ export const metadata: Metadata = {
   title: "Chiang Mai Transit Planner",
   description:
     "Build a public-transport network on the real Chiang Mai map and watch commuters respond.",
+};
+
+// Mobile/touch: render at device width (was defaulting to a desktop-width page on
+// phones). Allow pinch-zoom of the map up to 5× for accessibility.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#efe3cf",
 };
 
 export default function RootLayout({

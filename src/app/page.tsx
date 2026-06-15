@@ -87,6 +87,7 @@ export default function Page() {
   const [wonShown, setWonShown] = useState(false); // goal reached at least once
   const [showWin, setShowWin] = useState(false); // win overlay currently open
   const goalDoneRef = useRef(false); // latest goalDone, set during render (avoids a conditional hook)
+  const prevScoreRef = useRef(0); // last City Score, to flash the number up/down on change (no extra hook)
   const congAvgRef = useRef<number | null>(null); // smoothed traffic (grade/goal use this, not the rush spike)
   const baselineTrafficRef = useRef<number | null>(null); // no-network traffic, for the "Win the Cars" bar
   // undo: snapshots of {stations, lines} taken before each build/demolish/remove
@@ -403,11 +404,13 @@ export default function Page() {
               <div className="flex items-center gap-2.5">
                 <LannaEmblem size={34} />
                 <div>
-                  <div className="wordmark text-[25px] leading-none">
+                  <div className="wordmark text-[25px] leading-[1.3]">
                     เชียงใหม่ <span style={{ color: "var(--gold-deep)" }}>Transit</span>
                   </div>
-                  <div className="mt-1 text-[10px] uppercase tracking-[0.24em] text-[var(--muted)]">
-                    Chiang Mai · ผังเมืองรถไฟฟ้า
+                  {/* tracking only on the Latin run — letter-spacing mangles Thai (ผังเมือง…) */}
+                  <div className="mt-1 text-[10px] text-[var(--muted)]">
+                    <span className="uppercase tracking-[0.24em]">Chiang Mai</span>
+                    <span> · ผังเมืองรถไฟฟ้า</span>
                   </div>
                 </div>
               </div>
@@ -549,6 +552,10 @@ export default function Page() {
   const rkPct = (n: number) => (rkTot ? Math.round((n / rkTot) * 100) : 0);
   const baseScore = 100 * (0.68 * odScoreFrac + 0.18 * coverageScore + 0.14 * trafficReliefFrac);
   const cityScore = meta ? Math.round(baseScore * (0.82 + 0.18 * satFrac)) : 0;
+  // direction of the latest score change → flash the number jade (up) / red (down).
+  // compared during render against the previous render's value (cheap, no effect).
+  const scoreDir = cityScore > prevScoreRef.current ? 1 : cityScore < prevScoreRef.current ? -1 : 0;
+  prevScoreRef.current = cityScore;
   const grade =
     cityScore >= 82 ? { g: "A", c: "#2f8f6b", say: "World-class network 🎉" }
     : cityScore >= 66 ? { g: "B", c: "#4f9e78", say: "Strong — serve more corridors" }
@@ -665,16 +672,16 @@ export default function Page() {
       <KranokCorners />
 
       {/* Title + clock + economy */}
-      <div className="absolute left-4 top-4 z-20 w-[250px]">
+      <div className="absolute left-2 top-2 z-20 max-h-[44vh] w-[45vw] overflow-y-auto sm:left-4 sm:top-4 sm:max-h-none sm:w-[250px] sm:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="panel panel-accent px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="wordmark flex items-center gap-1.5 text-[15px] leading-none">
+            <div className="wordmark flex items-center gap-1.5 text-[15px] leading-[1.35]">
               <LannaEmblem size={16} /> เชียงใหม่ Transit
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] text-[var(--muted)]">
                 {DIFFICULTIES[difficulty].icon}{" "}
-                <span className="uppercase tracking-wide opacity-70">{t("goal", "เป้า")}:</span>{" "}
+                <span className={`opacity-70${lang === "en" ? " uppercase tracking-wide" : ""}`}>{t("goal", "เป้า")}:</span>{" "}
                 {goal ? t(goalDef?.label ?? "free", goalTh[goal].label) : "free"} ·{" "}
                 {t("day", "วัน")} {meta?.day ?? 0}
                 {deadlineDays != null && <span style={{ color: meta && meta.day > deadlineDays - 10 ? "var(--warn)" : undefined }}>/{deadlineDays}</span>}
@@ -731,7 +738,10 @@ export default function Page() {
                         <span className="ml-1 text-[var(--accent)]">· {t("goal", "เป้า")} ≥{gradeGoalTarget}</span>
                       )}
                     </span>
-                    <span className="font-mono text-lg font-semibold tabular-nums leading-none text-[var(--text)]">{cityScore}<span className="text-[11px] text-[var(--muted)]">/100</span></span>
+                    <span className="font-mono text-lg font-semibold tabular-nums leading-none text-[var(--text)]">
+                      <span key={cityScore} className={scoreDir > 0 ? "cm-flash-up" : scoreDir < 0 ? "cm-flash-down" : "cm-tick"}>{cityScore}</span>
+                      <span className="text-[11px] text-[var(--muted)]">/100</span>
+                    </span>
                   </div>
                   <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--fill-2)]">
                     <div className="h-full rounded-full" style={{ width: `${cityScore}%`, background: grade.c }} />
@@ -786,27 +796,37 @@ export default function Page() {
                   <span className="ml-auto text-[10px]">{t("resident · student · tourist", "คนเมือง · นักศึกษา · นักท่องเที่ยว")}</span>
                 </div>
               )}
-              <div className="mt-1 flex items-center justify-between text-[12px]">
-                <span style={{ color: crowdedLines > 0 ? "var(--danger)" : "var(--muted)" }}>
-                  🧍 {ppl(waiting)} {t("waiting", "รอ")}{crowdedLines > 0 ? ` · ${crowdedLines} ${t("crowded", "แน่น")}` : ""}
-                </span>
-                {crowdedLines > 0 && (
-                  <span className="text-[11px] text-[var(--accent)]">＋ {t("add trains / a line", "เพิ่มรถ / สายใหม่")}</span>
-                )}
-              </div>
-              {/* rider satisfaction (crowding + waits) + average wait — they complain when low */}
-              <div
-                className="mt-1 flex items-center justify-between text-[12px]"
-                title={t("Riders complain when trains are packed or waits are long — it caps your grade.", "ผู้โดยสารบ่นเมื่อรถแน่นหรือรอนาน — มีผลต่อเกรด")}
-              >
-                <span style={{ color: (meta.satisfaction ?? 100) >= 70 ? "var(--ride)" : (meta.satisfaction ?? 100) >= 45 ? "var(--warn)" : "var(--danger)" }}>
-                  {(meta.satisfaction ?? 100) >= 70 ? "😀" : (meta.satisfaction ?? 100) >= 45 ? "😐" : "😣"}{" "}
-                  {meta.satisfaction ?? 100}% {t("happy", "พอใจ")}
-                </span>
-                <span className="text-[var(--muted)]">
-                  ⏱ {Math.round((meta.avgWaitSec ?? 0) / 60)} {t("min wait", "นาทีรอ")}
-                </span>
-              </div>
+              {/* crowding + satisfaction only matter once a line is carrying riders —
+                  hide their zeroed rows in the cold (no-network) state (progressive disclosure) */}
+              {lines.length > 0 ? (
+                <>
+                  <div className="mt-1 flex items-center justify-between text-[12px]">
+                    <span style={{ color: crowdedLines > 0 ? "var(--danger)" : "var(--muted)" }}>
+                      🧍 {ppl(waiting)} {t("waiting", "รอ")}{crowdedLines > 0 ? ` · ${crowdedLines} ${t("crowded", "แน่น")}` : ""}
+                    </span>
+                    {crowdedLines > 0 && (
+                      <span className="text-[11px] text-[var(--accent)]">＋ {t("add trains / a line", "เพิ่มรถ / สายใหม่")}</span>
+                    )}
+                  </div>
+                  {/* rider satisfaction (crowding + waits) + average wait — they complain when low */}
+                  <div
+                    className="mt-1 flex items-center justify-between text-[12px]"
+                    title={t("Riders complain when trains are packed or waits are long — it caps your grade.", "ผู้โดยสารบ่นเมื่อรถแน่นหรือรอนาน — มีผลต่อเกรด")}
+                  >
+                    <span style={{ color: (meta.satisfaction ?? 100) >= 70 ? "var(--ride)" : (meta.satisfaction ?? 100) >= 45 ? "var(--warn)" : "var(--danger)" }}>
+                      {(meta.satisfaction ?? 100) >= 70 ? "😀" : (meta.satisfaction ?? 100) >= 45 ? "😐" : "😣"}{" "}
+                      {meta.satisfaction ?? 100}% {t("happy", "พอใจ")}
+                    </span>
+                    <span className="text-[var(--muted)]">
+                      ⏱ {Math.round((meta.avgWaitSec ?? 0) / 60)} {t("min wait", "นาทีรอ")}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-1.5 text-[11px] text-[var(--accent)]">
+                  ↩ {t("Place stations, then connect them to start moving the city.", "วางสถานี แล้วเชื่อมเข้าด้วยกัน เพื่อเริ่มขยับเมือง")}
+                </div>
+              )}
             </div>
           )}
 
@@ -898,7 +918,7 @@ export default function Page() {
 
       {/* Stats (hidden in Zen mode) */}
       {!zen && (
-      <div className="absolute right-4 top-4 z-20 w-[224px]">
+      <div className="absolute right-2 top-2 z-20 max-h-[44vh] w-[45vw] overflow-y-auto sm:right-4 sm:top-4 sm:max-h-none sm:w-[224px] sm:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="panel px-4 py-3 text-[13px]">
           <Stat label={t("Travellers", "ผู้คน")} value={meta ? ppl(meta.agentCount) : "…"} />
           <Stat label={t("Walking", "เดิน")} dot="var(--walk)" value={meta ? ppl(meta.walking) : "0"} />
@@ -957,29 +977,37 @@ export default function Page() {
               </button>
             );
           };
+          // cold state (no lines yet): trim to the 5 busiest corridors as a focused
+          // "start here" list, hide the served bar / met section (both meaningless at 0%)
+          const coldStart = lines.length === 0;
+          const unmetShown = coldStart ? odUnmet.slice(0, 5) : odUnmet;
           return (
             <div className="panel panel-accent mt-2 px-3 py-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11.5px] font-semibold">🎯 {t("Travel demand", "ความต้องการเดินทาง")}</span>
                 <span className="flex items-center gap-1.5">
-                  <span className="font-mono text-[11px]" style={{ color: odServedPct >= 50 ? "var(--ride)" : "var(--warn)" }}>
-                    {odServedPct}% {t("served", "ตอบโจทย์")}
-                  </span>
+                  {!coldStart && (
+                    <span className="font-mono text-[11px]" style={{ color: odServedPct >= 50 ? "var(--ride)" : "var(--warn)" }}>
+                      {odServedPct}% {t("served", "ตอบโจทย์")}
+                    </span>
+                  )}
                   <button className="text-[12px] text-[var(--muted)] hover:text-[var(--text)]" onClick={() => setShowOD(false)} title={t("Close", "ปิด")}>✕</button>
                 </span>
               </div>
-              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--fill-2)]">
-                <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${odServedPct}%`, background: "var(--ride)" }} />
-              </div>
+              {!coldStart && (
+                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--fill-2)]">
+                  <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${odServedPct}%`, background: "var(--ride)" }} />
+                </div>
+              )}
               <div className="mt-0.5 text-[9.5px] text-[var(--muted)]">{t("click a corridor to see it on the map", "คลิกเส้นทางเพื่อดูบนแผนที่")}</div>
 
               {/* UNMET — the priority list (people still drive these) */}
               <div className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold" style={{ color: "var(--danger)" }}>
-                🚗 {t("Still driving — build here", "ยังต้องขับรถ — ควรสร้าง")}
-                <span className="font-mono text-[var(--muted)]">{odUnmet.length}</span>
+                {coldStart ? `🚗 ${t("Start here — busiest unserved", "เริ่มจากตรงนี้ — เส้นที่คนใช้มากสุด")}` : `🚗 ${t("Still driving — build here", "ยังต้องขับรถ — ควรสร้าง")}`}
+                <span className="font-mono text-[var(--muted)]">{coldStart ? unmetShown.length : odUnmet.length}</span>
               </div>
               <div className="mt-1 flex max-h-[24vh] flex-col gap-px overflow-y-auto pr-0.5">
-                {odUnmet.map((c, i) => Row(c, i, "var(--danger)", true))}
+                {unmetShown.map((c, i) => Row(c, i, "var(--danger)", true))}
               </div>
 
               {/* MET — achievements */}
@@ -1050,33 +1078,35 @@ export default function Page() {
         );
       })()}
 
-      {/* Bottom controls — Bangkok-style tool palette */}
-      <div className="panel absolute bottom-12 left-1/2 z-20 flex max-w-[94vw] -translate-x-1/2 flex-wrap items-center justify-center gap-2 px-3 py-2.5">
+      {/* Bottom controls — Bangkok-style tool palette. On phones it's a single
+          swipeable strip (flex-nowrap + scroll); on ≥sm it wraps and centers. */}
+      <div className="panel absolute bottom-3 left-1/2 z-20 flex max-w-[96vw] -translate-x-1/2 flex-nowrap items-center justify-start gap-2 overflow-x-auto px-3 py-2.5 sm:bottom-12 sm:flex-wrap sm:justify-center sm:overflow-x-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button className="btn" onClick={() => (playing ? sim.pause() : sim.play())} disabled={!ready}>
           {playing ? "⏸" : "▶"}
         </button>
-        <div className="flex items-center gap-1">
+        {/* time speed — segmented (pick one), neutral selected segment (not gold) */}
+        <div className="segmented" role="group" aria-label={t("Speed", "ความเร็ว")}>
           {SPEEDS.map((s) => (
-            <button key={s} className={`btn ${speed === s ? "btn-active" : ""}`} onClick={() => sim.setSpeed(s)} disabled={!ready}>
+            <button key={s} className={`seg ${speed === s ? "seg-on" : ""}`} onClick={() => sim.setSpeed(s)} disabled={!ready}>
               {s}×
             </button>
           ))}
         </div>
         <div className="mx-1 h-7 w-px bg-[var(--line)]" />
 
-        {/* build-mode: 🚆 Metro trunk vs 🛻 Songthaew feeders */}
-        <div className="flex items-center gap-1">
+        {/* build-mode: 🚆 Metro trunk vs 🛻 Songthaew feeders — segmented (pick one) */}
+        <div className="segmented" role="group" aria-label={t("Build mode", "โหมดสร้าง")}>
           {(["metro", "songthaew"] as const).map((m) => (
             <button
               key={m}
-              className={`btn ${buildMode === m ? "btn-active" : ""}`}
+              className={`seg ${buildMode === m ? "seg-on" : ""}`}
               onClick={() => switchBuild(m)}
               disabled={!ready}
               title={m === "metro"
                 ? "Metro — fast, traffic-immune trunk lines (place stations → lay track)"
                 : "Songthaew — cheap road-bound feeders; draw a route along the streets"}
             >
-              {m === "metro" ? "🚆" : "🛻"} <span className="text-[11px]">{m === "metro" ? t("Metro", "รถไฟฟ้า") : t("Songthaew", "สองแถว")}</span>
+              {m === "metro" ? "🚆" : "🛻"} {m === "metro" ? t("Metro", "รถไฟฟ้า") : t("Songthaew", "สองแถว")}
             </button>
           ))}
         </div>
@@ -1113,36 +1143,41 @@ export default function Page() {
           ↶
         </button>
         <div className="mx-1 h-7 w-px bg-[var(--line)]" />
+        {/* view toggles — on/off switches for map overlays (jade when on, never gold) */}
         <button
-          className={`btn ${showDensity ? "btn-active" : ""}`}
+          className={`vtoggle ${showDensity ? "vtoggle-on" : ""}`}
+          aria-pressed={showDensity}
           onClick={() => setShowDensity((v) => !v)}
           title={t(
             "Population density heat — where residents, students & tourists are (plan with it on, build with it off)",
             "ความหนาแน่นประชากร — ที่อยู่ของคนเมือง นักศึกษา นักท่องเที่ยว (เปิดดูตอนวางแผน ปิดตอนสร้าง)",
           )}
         >
-          🔥 <span className="text-[11px]">{t("Density", "ความหนาแน่น")}</span>
+          🔥 {t("Density", "ความหนาแน่น")}
         </button>
         <button
-          className={`btn ${showAgents ? "btn-active" : ""}`}
+          className={`vtoggle ${showAgents ? "vtoggle-on" : ""}`}
+          aria-pressed={showAgents}
           onClick={() => setShowAgents((v) => !v)}
           title={t("Show/hide the moving people (walk · drive · ride)", "แสดง/ซ่อนผู้คนที่กำลังเดินทาง (เดิน · ขับรถ · นั่งรถไฟ)")}
         >
-          👣 <span className="text-[11px]">{t("People", "ผู้คน")}</span>
+          👣 {t("People", "ผู้คน")}
         </button>
         <button
-          className={`btn ${showOD ? "btn-active" : ""}`}
+          className={`vtoggle ${showOD ? "vtoggle-on" : ""}`}
+          aria-pressed={showOD}
           onClick={() => setShowOD((v) => !v)}
           title={t("Show/hide the travel-demand priorities panel", "แสดง/ซ่อนแผงความต้องการเดินทาง")}
         >
-          🎯 <span className="text-[11px]">{t("Demand", "ความต้องการ")}</span>
+          🎯 {t("Demand", "ความต้องการ")}
         </button>
         <button
-          className={`btn ${zen ? "btn-active" : ""}`}
+          className={`vtoggle ${zen ? "vtoggle-on" : ""}`}
+          aria-pressed={zen}
           onClick={() => setZen((v) => !v)}
           title={t("Zen mode — collapse to map + grade + tools; summon panels when you want them", "โหมดเซน — เหลือแผนที่ เกรด เครื่องมือ")}
         >
-          🌿 <span className="text-[11px]">{t("Zen", "เซน")}</span>
+          🌿 {t("Zen", "เซน")}
         </button>
         <button
           className="btn"

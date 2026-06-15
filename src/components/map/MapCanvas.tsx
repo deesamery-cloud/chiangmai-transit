@@ -750,6 +750,36 @@ export default function MapCanvas(props: Props) {
         // an inconsistent, easy-to-trigger-by-accident commit.)
         dragging.current = false;
       }}
+      // ── Touch parity (mobile): mirror the track-tool drag-connect onto touch so
+      // a finger can swipe through stations to connect them; a tap still chains via
+      // onClick (maplibre fires click on tap). dragPan is off in track mode so the
+      // one-finger drag is free to connect rather than pan.
+      onTouchStart={(e) => {
+        if (tool !== "track") return;
+        dragging.current = true;
+        dragMoved.current = false;
+        lastChained.current = null;
+        const s = nearestStation(e.lngLat.lng, e.lngLat.lat);
+        if (s) {
+          onChainStation(s.id);
+          lastChained.current = s.id;
+          pressed.current = true;
+        } else {
+          pressed.current = false;
+        }
+      }}
+      onTouchMove={(e) => {
+        if (tool !== "track" || !dragging.current) return;
+        const s = nearestStation(e.lngLat.lng, e.lngLat.lat);
+        if (s && s.id !== lastChained.current) {
+          onChainStation(s.id);
+          lastChained.current = s.id;
+          dragMoved.current = true;
+        }
+      }}
+      onTouchEnd={() => {
+        dragging.current = false;
+      }}
     >
       <DeckLayers frameRef={frameRef} />
     </Map>
