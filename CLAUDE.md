@@ -44,13 +44,23 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
 - `src/components/map/MapCanvas.tsx` — all deck layers: agents, rail (+halo), **chedi station
   markers** (IconLayer) + names (TextLayer), **crowd-coloured capsule trains** (IconLayer 1–5),
   **density heat** (HeatmapLayer, hour-weighted, toggle), **selected O→D arc**. NOTE: SVG data-URI
-  icons MUST include explicit `width`/`height` attrs or deck's `createImageBitmap` throws.
+  icons MUST include explicit `width`/`height` attrs or deck's `createImageBitmap` throws. The
+  basemap is muted via a CSS filter on `.maplibregl-canvas` (deck overlay stays full-saturation).
+  Map build interaction works on mouse AND touch — `onClick` (tap) places/chains stations; the
+  press-drag connect is mirrored to `onTouchStart/Move/End` for fingers.
 - `src/app/page.tsx` — the whole HUD: start screen (goals + difficulty), left panel (clock/economy/
-  **single City Score grade** + satisfaction + per-line performance), right summary (stats + spark +
-  **Travel-demand/OD panel**), tool palette + 🔥 Density / 👣 People / 🎯 Demand toggles, win/lose
-  overlays, i18n (`t(en,th)`), undo, autosave (localStorage `cm-save-v1`).
+  **single City Score grade** + an **inline grade breakdown** = 3 weighted bars ·68/·18/·14 + "biggest
+  gain" next-step + satisfaction + per-line performance), right summary (stats + spark +
+  **Travel-demand/OD panel**), bottom control bar, win/lose overlays, i18n (`t(en,th)`), undo,
+  autosave (localStorage `cm-save-v1`). The bottom bar uses **three distinct control grammars**: gold
+  is reserved for the ARMED build tool; time-speed + Metro/Songthaew mode are `.segmented` controls
+  (dark selected segment); 🔥 Density / 👣 People / 🎯 Demand / 🌿 Zen are `.vtoggle` on/off switches.
 - `src/app/{layout.tsx,globals.css}` — Lanna heritage theme (parchment + temple gold + cinnabar +
-  jade), CSS-variable driven; `.panel`, `.panel-accent`, `.gold-rule`, `.wordmark`, `LannaEmblem`.
+  jade), CSS-variable driven; `.panel`, `.panel-accent`, `.gold-rule`, `.wordmark`, `LannaEmblem`,
+  the control grammars (`.segmented/.seg/.seg-on`, `.vtoggle/.vtoggle-on`), a small motion vocab
+  (`cm-pop-in/cm-fade-in/cm-glow-pulse/cm-tick/cm-flash-up/down`, honours reduced-motion), and a
+  `@media (pointer:coarse)` 44px tap-target pass. `layout.tsx` exports `viewport` (device-width) for
+  mobile; the `--font-mono` stack appends a Thai fallback so `฿` renders (Geist Mono lacks it).
 
 ## Core gameplay model
 - **City Score / grade** (`page.tsx`): demand-dominated — `(0.68·served + 0.18·coverage +
@@ -68,6 +78,13 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
   build). Songthaew = cheap, road-bound, tiny-capacity FEEDER (draw-a-route via `addLine`/`buildLine`);
   it overcrowds on busy corridors + adds traffic, so it complements metro and can't reach A alone. Road
   vehicles render as a red truck (`TRUCK` icon, `vehicle.road` flag); metro as the capsule train.
+- **Start defaults**: a fresh game runs at **1×** speed (useSim speed state + worker `speed` both 1,
+  kept consistent) and auto-plays; the 🎯 Demand/OD panel (`showOD`) and 👣 People overlay (`showAgents`,
+  the red driving dots = "traffic") both default **off** for a clean starting map. None of these are
+  persisted, so they apply to every fresh start; the player toggles them on at will.
+- **Build flow**: finishing a line (`finishRail`/`finishRoute`) auto-selects it + drops to Pan so the
+  bottom edit strip (＋ vehicle / fare / recolour / remove) appears immediately. `addLine`/
+  `addLineFromStations` guard cap+budget synchronously (via `linesRef`) and return the new line.
 
 ## Design system
 `design-system/` holds self-contained HTML preview cards mirrored to a **claude.ai/design**
@@ -77,5 +94,14 @@ project ("Chiang Mai Transit — Lanna UI") via the DesignSync tool / `/design-s
 - Keep the SIMULATION + ECONOMY in sim units; scale only human-facing displays.
 - Tune gameplay in `config.ts` constants first; verify with `sim-smoke` + a `verify-*.mjs` before
   declaring done. Aim for 0 console errors.
+- **UI grammars**: reserve gold for exactly one meaning — the armed build tool. Pick-one controls use
+  `.segmented`; on/off overlay toggles use `.vtoggle`. Don't reintroduce `.btn-active` (gold) for mode/
+  speed/toggles.
+- **i18n**: default language is **EN**. Every player-facing string on the critical path must go through
+  `t(en, th)` and lead with the active language — including canvas hints, tool labels, coachmark beats,
+  and worker `setNotice` errors (no bare single-language strings). Don't letter-space/track Thai runs.
+- **Mobile/touch**: keep map interaction pointer-agnostic (tap via `onClick`, drag via touch handlers),
+  44px targets on coarse pointers, the bottom bar a swipeable strip, and side panels height-capped so
+  the lower map stays tappable.
 - The Bangkok repo `~/bangkok-metro-sandbox` (github deesamery-cloud/bangkok-metro-sandbox) is
   REFERENCE ONLY — do not edit it.
