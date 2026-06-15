@@ -84,6 +84,23 @@ export const OD = {
   scaleTop: 5400, // scale the top corridor to ~this for a readable "trips/day"
 } as const;
 
+// --- Light events + economy --------------------------------------------------
+// A SEEDED scheduler fires one event every ~EVENT_EVERY_DAYS for `days` days,
+// perturbing demand / driving so every seed plays differently and the city stays
+// alive. Effects are multipliers applied while the event is active.
+export const EVENT_EVERY_DAYS = 4;
+export const EVENTS: {
+  id: string; icon: string; en: string; th: string; days: number;
+  driveMult?: number; touristMult?: number; studentMult?: number;
+}[] = [
+  { id: "festival", icon: "🎆", en: "Lanna festival", th: "เทศกาลล้านนา", days: 2, touristMult: 1.9 },
+  { id: "fuel", icon: "⛽", en: "Fuel price shock", th: "น้ำมันแพง", days: 3, driveMult: 1.5 },
+  { id: "rain", icon: "🌧️", en: "Heavy monsoon", th: "ฝนตกหนัก", days: 2, driveMult: 1.3, touristMult: 0.75 },
+  { id: "exam", icon: "🎓", en: "Exam week", th: "สัปดาห์สอบ", days: 3, studentMult: 1.7 },
+];
+// While the budget is negative it accrues interest per day — overspending spirals.
+export const DEBT_INTEREST_PER_DAY = 0.04;
+
 // How people decide to travel. A trip is WALKED if short; otherwise the agent
 // compares the cheapest transit option against DRIVING (generalised cost in
 // minutes, fares + parking folded in) and picks the cheaper. Driving and buses
@@ -308,11 +325,11 @@ export const DIFFICULTIES: Record<
     label: "Medium",
     icon: "🟡",
     budgetMult: 1.0,
-    costMult: 1.0,
-    opexMult: 1.0,
+    costMult: 1.15, // building is a real capital bet now
+    opexMult: 1.35, // ongoing maintenance bites
     fareMult: 1.0,
     capacityMult: 1.0,
-    bankruptcy: false,
+    bankruptcy: true, // debt accrues interest — money is a real constraint on Medium+
     deadlineDays: null,
     targets: {
       cars: { trafficMax: 35, ridersMin: 25_000 },

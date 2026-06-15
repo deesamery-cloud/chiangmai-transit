@@ -173,6 +173,7 @@ export interface SnapshotMeta {
   odTotalCount: number; // corridors tracked
   // who is riding — 24h boardings split by traveller kind
   ridersByKind: { resident: number; student: number; tourist: number };
+  activeEvent: { id: string; icon: string; daysLeft: number } | null; // current light event
   events: string[]; // new event messages since last snapshot (for the ticker)
   vehicles: {
     lon: number;
@@ -199,6 +200,7 @@ export type ToWorker =
       opexMult?: number;
       fareMult?: number;
       capMult?: number;
+      seed?: number; // per-run seed: perturbs OD demand + the event schedule
     }
   | { type: "play" }
   | { type: "pause" }

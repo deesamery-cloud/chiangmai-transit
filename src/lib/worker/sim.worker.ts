@@ -51,6 +51,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
         msg.startBudget,
         msg.bankruptcy,
         { costMult: msg.costMult, opexMult: msg.opexMult, fareMult: msg.fareMult, capMult: msg.capMult },
+        msg.seed,
       );
       post({ type: "ready" });
       snapshot();

@@ -50,7 +50,7 @@ export interface UseSim {
   history: HistoryPoint[];
   ticker: string[];
   notice: string | null;
-  startGame: (goal: GoalKind, difficulty: Difficulty) => void;
+  startGame: (goal: GoalKind, difficulty: Difficulty, seed?: number) => void;
   play: () => void;
   pause: () => void;
   setSpeed: (v: number) => void;
@@ -179,7 +179,7 @@ export function useSim(): UseSim {
   }, []);
 
   const startGame = useCallback(
-    (g: GoalKind, difficulty: Difficulty) => {
+    (g: GoalKind, difficulty: Difficulty, seed = 1) => {
       const d = dataRef.current;
       if (!d || started) return;
       const gm = GOALS[g];
@@ -200,6 +200,7 @@ export function useSim(): UseSim {
         opexMult: dif.opexMult,
         fareMult: dif.fareMult,
         capMult: dif.capacityMult,
+        seed,
       });
     },
     [send, started],

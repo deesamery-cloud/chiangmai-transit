@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useSim } from "@/lib/worker/useSim";
 import type { LineMode, ODCorridor, PerLine, PlacedStation, TransitLine } from "@/lib/types";
 import { haversine } from "@/lib/geo/graph";
@@ -16,12 +16,14 @@ import {
   MAX_FLEET,
   MAX_SNAP_M,
   MODE_PARAMS,
+  EVENTS,
   PEOPLE_PER_AGENT,
   ROUTE_TOOL,
   SIM,
   TOOLS,
   type Tool,
 } from "@/lib/config";
+import { playSfx, setSfxMuted } from "@/lib/sfx";
 
 const MapCanvas = dynamic(() => import("@/components/map/MapCanvas"), { ssr: false });
 
@@ -62,6 +64,9 @@ export default function Page() {
   const [showAgents, setShowAgents] = useState(true); // 👣 commuter dots (walk/drive/ride) overlay
   const [showOD, setShowOD] = useState(true); // 🎯 travel-demand panel open/closed
   const [selectedOD, setSelectedOD] = useState<ODCorridor | null>(null); // a corridor highlighted on the map
+  const [seed, setSeed] = useState(100000); // per-run seed (randomised on mount to avoid an SSR/client mismatch)
+  const [zen, setZen] = useState(false); // minimal HUD: map + grade + palette only
+  const [muted, setMuted] = useState(false); // 🔊 sound on/off
   const mode: LineMode = "metro"; // metro-only game
   // stations the player has placed (standalone until connected with rail)
   const [stations, setStations] = useState<PlacedStation[]>([]);
@@ -87,7 +92,8 @@ export default function Page() {
   // undo: snapshots of {stations, lines} taken before each build/demolish/remove
   const [undoStack, setUndoStack] = useState<{ stations: PlacedStation[]; lines: TransitLine[] }[]>([]);
   const undoRef = useRef<() => void>(() => {});
-  const [showCoach, setShowCoach] = useState(false); // first-run 3-step build tutorial
+  const [showCoach, setShowCoach] = useState(false); // first-run just-in-time tutorial
+  const [coachAdv, setCoachAdv] = useState(3); // advanced tutorial beat (≥3) after the first line
   const [lang, setLang] = useState<"en" | "th">("en"); // TH/EN toggle
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   // save/load: autosave the network; offer "resume" on the start screen
@@ -112,6 +118,7 @@ export default function Page() {
     if (goalDoneRef.current && !wonShown) {
       setWonShown(true);
       setShowWin(true);
+      playSfx("gong");
     }
   });
 
@@ -134,6 +141,7 @@ export default function Page() {
 
   // load any prior save (for the start-screen "Resume" button)
   useEffect(() => {
+    setSeed(Math.floor(Math.random() * 900000) + 100000); // client-only: no SSR mismatch
     try {
       const r = localStorage.getItem("cm-save-v1");
       if (r) setSaved(JSON.parse(r));
@@ -213,6 +221,7 @@ export default function Page() {
     }
     pushUndo();
     sim.addLine(routeDraft, "songthaew", LINE_COLORS[colorIdx].rgb);
+    playSfx("clack");
     setRouteDraft([]);
   };
   const cancelRoute = () => {
@@ -233,6 +242,7 @@ export default function Page() {
     const seq = stationSeq.current++;
     const slon = g.lon(n);
     const slat = g.lat(n);
+    playSfx("place");
     setStations((prev) => [
       ...prev,
       { id: `st-${seq}`, lon: slon, lat: slat, node: n, name: stationName(slon, slat, seq) },
@@ -310,6 +320,7 @@ export default function Page() {
       const chosen = resolve(ids, stations);
       if (chosen.length >= 2) sim.addLineFromStations(chosen, mode, LINE_COLORS[colorIdx].rgb);
     }
+    playSfx("clack");
     setChain([]);
     setSnapWarn(false);
   };
@@ -418,6 +429,20 @@ export default function Page() {
               </div>
             </div>
 
+            {/* per-run seed — different hot corridors + events each seed */}
+            <div className="mt-2 flex items-center gap-2 text-[11px]">
+              <span className="text-[var(--muted)]">{t("Seed", "ซีด")}</span>
+              <span className="rounded bg-[var(--fill-2)] px-2 py-0.5 font-mono text-[var(--text)]">{seed}</span>
+              <button
+                className="btn px-2 py-0.5 text-[11px]"
+                onClick={() => setSeed(Math.floor(Math.random() * 900000) + 100000)}
+                title={t("New seed — a different city build each run", "ซีดใหม่ — เมืองต่างออกไปทุกครั้ง")}
+              >
+                🎲 {t("re-roll", "สุ่มใหม่")}
+              </button>
+              <span className="text-[10px] text-[var(--muted)]">{t("varies demand + events", "เปลี่ยนความต้องการ + เหตุการณ์")}</span>
+            </div>
+
             <div className="mt-3 grid grid-cols-2 gap-2">
               {(Object.keys(GOALS) as GoalKind[]).map((g) => {
                 const m = GOALS[g];
@@ -425,7 +450,7 @@ export default function Page() {
                   <button
                     key={g}
                     className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--fill)] px-3 py-3 text-left transition-colors hover:border-[var(--gold)] hover:bg-[var(--paper)] disabled:opacity-50"
-                    onClick={() => sim.startGame(g, difficulty)}
+                    onClick={() => sim.startGame(g, difficulty, seed)}
                     disabled={!loaded}
                   >
                     <span className="text-[13px] font-semibold">
@@ -444,7 +469,7 @@ export default function Page() {
                   restoreRef.current = { stations: saved.stations || [], lines: saved.lines || [] };
                   const dm = saved.difficulty ?? "medium";
                   setDifficulty(dm);
-                  sim.startGame(saved.goal, dm);
+                  sim.startGame(saved.goal, dm, seed);
                 }}
                 disabled={!loaded}
               >
@@ -593,15 +618,15 @@ export default function Page() {
 
       {/* ── Lanna map dressing (decorative, non-interactive; sits above the map
             but below every panel so only the realistic basemap is affected) ── */}
-      {/* subtle sepia wash — harmonises the cool basemap with the parchment UI */}
+      {/* very light sepia tint — just a whisper of warmth, keeps the real map clearly readable */}
       <div
         className="pointer-events-none absolute inset-0 z-10"
-        style={{ background: "rgba(196,142,52,0.13)", mixBlendMode: "multiply" }}
+        style={{ background: "rgba(196,142,52,0.05)", mixBlendMode: "multiply" }}
       />
-      {/* warm parchment vignette + a temple-gold hairline frame */}
+      {/* soft edge vignette + gold hairline frame (kept off the map centre) */}
       <div
         className="pointer-events-none absolute inset-0 z-10"
-        style={{ boxShadow: "inset 0 0 150px 26px rgba(74,50,22,0.30)", border: "1.5px solid rgba(200,150,43,0.5)" }}
+        style={{ boxShadow: "inset 0 0 90px 8px rgba(74,50,22,0.14)", border: "1.5px solid rgba(200,150,43,0.45)" }}
       />
       {/* four corner kranok flourishes */}
       <KranokCorners />
@@ -628,11 +653,22 @@ export default function Page() {
             <div>
               <div className="font-mono text-2xl tabular-nums leading-none">{meta ? clock(meta.simTime) : "--:--"}</div>
               {meta && <div className="mt-0.5 text-[10.5px] text-[var(--muted)]">{peakBadge}</div>}
+              {meta?.activeEvent && (() => {
+                const ev = EVENTS.find((e) => e.id === meta.activeEvent!.id);
+                return (
+                  <div className="mt-0.5 inline-flex items-center gap-1 rounded bg-[var(--fill-2)] px-1.5 py-0.5 text-[10px] font-medium" style={{ color: "var(--warn)" }}>
+                    {meta.activeEvent.icon} {ev ? t(ev.en, ev.th) : ""} · {meta.activeEvent.daysLeft}{t("d", "ว")}
+                  </div>
+                );
+              })()}
             </div>
             <div className="text-right">
               <div className="font-mono text-lg tabular-nums" style={{ color: meta && meta.budget < 0 ? "var(--danger)" : "var(--accent)" }}>
                 {meta ? money(meta.budget) : "…"}
               </div>
+              {meta && meta.budget < 0 && (
+                <div className="font-mono text-[9.5px]" style={{ color: "var(--danger)" }}>{t("debt +interest", "หนี้ +ดอกเบี้ย")}</div>
+              )}
               <div className="font-mono text-[11px]" style={{ color: net >= 0 ? "var(--ride)" : "var(--warn)" }}>
                 {net >= 0 ? "+" : ""}
                 {money(net)}/day
@@ -737,8 +773,8 @@ export default function Page() {
           )}
         </div>
 
-        {/* Your network */}
-        {lines.length > 0 && (
+        {/* Your network (hidden in Zen mode) */}
+        {!zen && lines.length > 0 && (
           <div className="panel mt-2 px-3 py-2.5">
             <div className="mb-1.5 flex items-center justify-between text-[11.5px] text-[var(--muted)]">
               <span>{t("YOUR NETWORK", "เครือข่ายของคุณ")} · {lines.length}</span>
@@ -869,7 +905,8 @@ export default function Page() {
         )}
       </div>
 
-      {/* Stats */}
+      {/* Stats (hidden in Zen mode) */}
+      {!zen && (
       <div className="absolute right-4 top-4 z-20 w-[224px]">
         <div className="panel px-4 py-3 text-[13px]">
           <Stat label={t("Travellers", "ผู้คน")} value={meta ? ppl(meta.agentCount) : "…"} />
@@ -970,63 +1007,51 @@ export default function Page() {
           );
         })()}
       </div>
+      )}
 
-      {/* First-run tutorial coachmark (3 steps, state-driven, bilingual) */}
+      {/* Just-in-time tutorial: steps 1-2 state-driven; once a line runs, the
+          player advances through OD / fares / songthaew with Next. */}
       {showCoach && (() => {
         const built = lines.length >= 1;
-        const step = built ? 3 : stations.length >= 2 ? 2 : 1;
+        const step = built ? coachAdv : stations.length >= 2 ? 2 : 1;
+        const TOTAL = 6;
         const dismiss = () => {
           setShowCoach(false);
           try { localStorage.setItem("cm-onboarded", "1"); } catch {}
         };
+        const next = () => (coachAdv >= TOTAL ? dismiss() : setCoachAdv((s) => s + 1));
+        const beats: Record<number, [ReactNode, ReactNode]> = {
+          1: [<b key="t">วางสถานี · Place stations</b>, <>คลิก <b className="text-[var(--text)]">🚉 วางสถานี</b> แล้วคลิกบนถนน ≥2 จุด · Click 🚉, then click 2+ road spots.</>],
+          2: [<b key="t">วางราง · Lay track</b>, <>คลิก <b className="text-[var(--text)]">🛤️ วางราง</b> เชื่อมสถานี แล้วกด <b className="text-[var(--text)]">✓ Finish</b> · click 🛤️, connect stations, press ✓ Finish.</>],
+          3: [<b key="t" style={{ color: "var(--ride)" }}>🎉 เส้นทางแรกวิ่งแล้ว! · Your first line runs!</b>, <>Watch commuters switch off the roads. Now let&apos;s grow it.</>],
+          4: [<b key="t">🎯 ความต้องการเดินทาง · Travel demand</b>, <>Open <b className="text-[var(--text)]">🎯 Demand</b> — the red &quot;still driving&quot; corridors are <i>why your grade is low</i>. Click one to see it on the map, then build toward it.</>],
+          5: [<b key="t">💰 ค่าโดยสาร · Fares</b>, <>Click a line in <b className="text-[var(--text)]">Your Network</b> and set its <b className="text-[var(--text)]">Fare</b> — raise it to shed crowding &amp; earn more, lower it to attract riders.</>],
+          6: [<b key="t">🛻 สองแถว · Songthaew feeders</b>, <>Switch to <b className="text-[var(--text)]">🛻 Songthaew</b> and <b className="text-[var(--text)]">draw a cheap route</b> feeding a metro station — last-mile coverage where a trunk isn&apos;t worth it.</>],
+        };
+        const [title, body] = beats[step] ?? beats[1];
         return (
           <div
-            className="panel pointer-events-none absolute bottom-32 left-1/2 z-30 w-[440px] max-w-[92vw] -translate-x-1/2 px-4 py-3"
+            className="panel pointer-events-none absolute bottom-32 left-1/2 z-30 w-[460px] max-w-[92vw] -translate-x-1/2 px-4 py-3"
             style={{ borderColor: "var(--accent)" }}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="text-[12.5px] leading-relaxed">
-                {step === 1 && (
-                  <>
-                    <b>ขั้นที่ 1/3 · Step 1/3 — วางสถานี / Place stations</b>
-                    <div className="text-[var(--muted)]">
-                      คลิกปุ่ม 🚉 แล้วคลิกบนถนน ≥2 จุด · Click <b className="text-[var(--text)]">🚉 วางสถานี</b>, then click 2+ spots on a road.
-                    </div>
-                  </>
-                )}
-                {step === 2 && (
-                  <>
-                    <b>ขั้นที่ 2/3 · Step 2/3 — วางราง / Lay track</b>
-                    <div className="text-[var(--muted)]">
-                      คลิก <b className="text-[var(--text)]">🛤️ วางราง</b> แล้วคลิกสถานีทีละจุดเพื่อเชื่อม จากนั้นกด <b className="text-[var(--text)]">✓ Finish</b> · Click 🛤️, click your stations to connect, then press ✓ Finish.
-                    </div>
-                  </>
-                )}
-                {step === 3 && (
-                  <>
-                    <b style={{ color: "var(--ride)" }}>🎉 เส้นทางแรกของคุณวิ่งแล้ว! · Your first line is running!</b>
-                    <div className="text-[var(--muted)]">
-                      Watch commuters switch from cars. Place more stations and extend lines to grow your city.
-                    </div>
-                  </>
-                )}
+                <div className="text-[10px] text-[var(--muted)]">{t(`Step ${step}/6`, `ขั้นที่ ${step}/6`)}</div>
+                {title}
+                <div className="text-[var(--muted)]">{body}</div>
               </div>
               <button className="pointer-events-auto shrink-0 text-[11px] text-[var(--muted)] hover:text-[var(--text)]" onClick={dismiss}>
-                {built ? "ปิด ✕" : "ข้าม · Skip"}
+                {t("Skip", "ข้าม")} ✕
               </button>
             </div>
             {built && (
-              <button className="btn btn-accent pointer-events-auto mt-2 w-full justify-center" onClick={dismiss}>
-                เข้าใจแล้ว · Got it ✓
+              <button className="btn btn-accent pointer-events-auto mt-2 w-full justify-center" onClick={next}>
+                {coachAdv >= TOTAL ? t("Got it ✓", "เข้าใจแล้ว ✓") : t("Next →", "ถัดไป →")}
               </button>
             )}
             <div className="mt-2 flex gap-1">
-              {[1, 2, 3].map((n) => (
-                <span
-                  key={n}
-                  className="h-1 flex-1 rounded-full"
-                  style={{ background: n <= step ? "var(--accent)" : "rgba(255,255,255,.15)" }}
-                />
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <span key={n} className="h-1 flex-1 rounded-full" style={{ background: n <= step ? "var(--accent)" : "var(--fill-2)" }} />
               ))}
             </div>
           </div>
@@ -1119,6 +1144,20 @@ export default function Page() {
           title={t("Show/hide the travel-demand priorities panel", "แสดง/ซ่อนแผงความต้องการเดินทาง")}
         >
           🎯 <span className="text-[11px]">{t("Demand", "ความต้องการ")}</span>
+        </button>
+        <button
+          className={`btn ${zen ? "btn-active" : ""}`}
+          onClick={() => setZen((v) => !v)}
+          title={t("Zen mode — collapse to map + grade + tools; summon panels when you want them", "โหมดเซน — เหลือแผนที่ เกรด เครื่องมือ")}
+        >
+          🌿 <span className="text-[11px]">{t("Zen", "เซน")}</span>
+        </button>
+        <button
+          className="btn"
+          onClick={() => setMuted((m) => { const n = !m; setSfxMuted(n); return n; })}
+          title={t("Sound on/off", "เสียง เปิด/ปิด")}
+        >
+          {muted ? "🔇" : "🔊"}
         </button>
 
         {/* 🚉 place stations — click roads to drop standalone stations (no rail yet) */}

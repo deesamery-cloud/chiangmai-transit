@@ -12,9 +12,19 @@ import type {
   TransitLine,
   ZoneData,
 } from "@/lib/types";
-import { type AgentKind, DEMOGRAPHICS, ECONOMY, GOAL, OD, SIM, TRAVEL } from "@/lib/config";
+import { type AgentKind, DEBT_INTEREST_PER_DAY, DEMOGRAPHICS, ECONOMY, EVENT_EVERY_DAYS, EVENTS, GOAL, OD, SIM, TRAVEL } from "@/lib/config";
 
 const KINDS: AgentKind[] = ["resident", "student", "tourist"];
+
+// small seeded PRNG (mulberry32) so a run's seed reproduces its demand + events
+function mulberry32(a: number): () => number {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 // One end of an OD corridor (a named origin home or destination activity centre).
 interface ODHub {
@@ -188,6 +198,12 @@ export class SimEngine {
   private fareMult = 1;
   private capMult = 1;
 
+  // seed + light-event scheduler
+  private rand: () => number = Math.random;
+  private activeEvent: (typeof EVENTS)[number] | null = null;
+  private eventEnd = 0;
+  private nextEventAt = 0;
+
   constructor(
     graph: Graph,
     zones: ZoneData,
@@ -196,6 +212,7 @@ export class SimEngine {
     startBudget = Infinity,
     bankruptcy = false,
     mults?: { costMult?: number; opexMult?: number; fareMult?: number; capMult?: number },
+    seed = 1,
   ) {
     this.budget = startBudget;
     this.bankruptcy = bankruptcy;
@@ -203,6 +220,8 @@ export class SimEngine {
     this.opexMult = mults?.opexMult ?? 1;
     this.fareMult = mults?.fareMult ?? 1;
     this.capMult = mults?.capMult ?? 1;
+    this.rand = mulberry32(seed >>> 0 || 1);
+    this.nextEventAt = EVENT_EVERY_DAYS * SIM.daySeconds; // first event after a few days
     this.graph = graph;
     this.router = new Router(graph);
     this.pois = poiData.pois;
@@ -362,6 +381,14 @@ export class SimEngine {
     let hump = 0;
     for (const hr of d.peakHours) hump += Math.exp(-((h - hr) ** 2) / d.peakSpread);
     return d.peakBase + d.peakAmp * Math.min(1, hump);
+  }
+  // active-event demand boost for a kind (festival → tourists, exam week → students)
+  private eventDemandMult(kind: AgentKind): number {
+    const ev = this.activeEvent;
+    if (!ev) return 1;
+    if (kind === "tourist") return ev.touristMult ?? 1;
+    if (kind === "student") return ev.studentMult ?? 1;
+    return 1;
   }
   private lowerBound(cum: Float64Array, r: number): number {
     let lo = 0;
@@ -572,6 +599,8 @@ export class SimEngine {
     // dedupe origins by name too (no repeated labels in the corridor list)
     const seenO = new Set<string>();
     this.odO = this.odO.filter((h) => h.name && !seenO.has(h.name) && (seenO.add(h.name), true));
+    // SEED variance: perturb origin weights so each run has different hot corridors
+    for (const h of this.odO) h.w *= 0.55 + 0.9 * this.rand();
 
     // destinations: grid-cluster POI attraction; label each cell by its strongest
     // named non-leisure POI (recognisable anchors — temples, schools, markets…)
@@ -616,6 +645,7 @@ export class SimEngine {
       seenD.add(name);
       this.odD.push({ lon, lat, node: g.nearestNode(lon, lat), name, w });
     }
+    for (const h of this.odD) h.w *= 0.55 + 0.9 * this.rand(); // seed variance on destinations too
 
     // gravity demand matrix O×D (skip walkable-short pairs)
     this.odPairs = [];
@@ -802,6 +832,22 @@ export class SimEngine {
     for (const a of this.agents) this.stepAgent(a, dt);
 
     if (isFinite(this.budget)) this.budget -= this.opexPerSec * dt;
+    // debt spirals: a negative budget accrues interest per day
+    if (this.bankruptcy && isFinite(this.budget) && this.budget < 0) {
+      this.budget += this.budget * (DEBT_INTEREST_PER_DAY / SIM.daySeconds) * dt;
+    }
+    // light-event scheduler (seeded): one event every ~EVENT_EVERY_DAYS
+    if (this.activeEvent && this.elapsed >= this.eventEnd) {
+      this.events.push(`✓ ${this.activeEvent.en} passed`);
+      this.activeEvent = null;
+    }
+    if (!this.activeEvent && this.elapsed >= this.nextEventAt) {
+      const ev = EVENTS[Math.floor(this.rand() * EVENTS.length) % EVENTS.length];
+      this.activeEvent = ev;
+      this.eventEnd = this.elapsed + ev.days * SIM.daySeconds;
+      this.nextEventAt = this.eventEnd + EVENT_EVERY_DAYS * SIM.daySeconds;
+      this.events.push(`${ev.icon} ${ev.en} — ${ev.days} days`);
+    }
     if (this.elapsed - this.lastOD > OD.refreshSec) {
       this.lastOD = this.elapsed;
       this.refreshOD();
@@ -1042,7 +1088,7 @@ export class SimEngine {
       // diurnal rhythm per kind: at that kind's peak people re-trip sooner → more
       // cars + riders on the move; tourists trip more often (tripsScale).
       const dwell = SIM.dwellMinSec + Math.random() * (SIM.dwellMaxSec - SIM.dwellMinSec);
-      a.dwellUntil = this.time + dwell / (this.peakMult(a.kind) * DEMOGRAPHICS[a.kind].tripsScale);
+      a.dwellUntil = this.time + dwell / (this.peakMult(a.kind) * DEMOGRAPHICS[a.kind].tripsScale * this.eventDemandMult(a.kind));
       this.tripsDone++;
     }
   }
@@ -1089,9 +1135,10 @@ export class SimEngine {
     const oLat = this.graph.lat(origin);
     const { cost: bestCost, legs: bestLegs } = this.bestTransitJourney(oLon, oLat, destLon, destLat);
 
-    // driving cost: time at the CURRENT traffic speed + parking hassle
+    // driving cost: time at the CURRENT traffic speed + parking hassle (× any
+    // active event that makes driving dearer — fuel shock / monsoon)
     const driveSpeed = Math.max(TRAVEL.carMinSpeed, TRAVEL.carFreeSpeed * this.avgFactor);
-    const driveCost = dist / driveSpeed / 60 + TRAVEL.parkPenaltyMin;
+    const driveCost = (dist / driveSpeed / 60 + TRAVEL.parkPenaltyMin) * (this.activeEvent?.driveMult ?? 1);
 
     // tourists & students ride far more readily (no/few cars) → their corridors
     // fill trains. propensity widens the "transit still wins" margin per kind.
@@ -1289,6 +1336,9 @@ export class SimEngine {
       odMetCount: this.odMetCount,
       odTotalCount: this.odPairs.length,
       ridersByKind: this.kindRiders(),
+      activeEvent: this.activeEvent
+        ? { id: this.activeEvent.id, icon: this.activeEvent.icon, daysLeft: Math.max(0, Math.ceil((this.eventEnd - this.elapsed) / SIM.daySeconds)) }
+        : null,
       events,
       vehicles,
     };

@@ -170,6 +170,10 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
   const parity = useRef(0);
   const lineKey = useRef("");
   const netLayers = useRef<Layer[]>([]);
+  // vehicle position interpolation so trains/songthaews GLIDE between snapshots
+  const vehState = useRef<{ prev: SnapshotMeta["vehicles"]; cur: SnapshotMeta["vehicles"]; t0: number; span: number; ref: unknown }>(
+    { prev: [], cur: [], t0: 0, span: 160, ref: null },
+  );
 
   useEffect(() => {
     let raf = 0;
@@ -248,8 +252,8 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } as any,
             radiusUnits: "pixels",
-            getRadius: 2.2,
-            radiusMinPixels: 1.4,
+            getRadius: 1.8,
+            radiusMinPixels: 1,
             pickable: false,
             parameters: { depthTest: false },
             updateTriggers: { getPosition: parity.current },
@@ -354,34 +358,52 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
 
       // --- vehicles: a line-colour base dot + a crowding-coloured train -----
       if (f.vehicles && f.vehicles.length) {
+        // interpolate positions between snapshots so vehicles glide, not teleport
+        const vs = vehState.current;
+        const vehs = f.vehicles;
+        const now = performance.now();
+        if (vehs !== vs.ref) {
+          vs.prev = vs.cur.length === vehs.length ? vs.cur : vehs; // snap if the network changed
+          vs.span = Math.min(420, Math.max(60, now - vs.t0));
+          vs.cur = vehs;
+          vs.t0 = now;
+          vs.ref = vehs;
+        }
+        let g = vs.span ? (now - vs.t0) / vs.span : 1;
+        if (g > 1) g = 1;
+        else if (g < 0) g = 0;
+        const vpos: [number, number][] = vehs.map((v, i) => {
+          const p = vs.prev[i];
+          return p ? [lerp(p.lon, v.lon, g), lerp(p.lat, v.lat, g)] : [v.lon, v.lat];
+        });
         // line-colour halo underneath so you can still tell which line a train runs
         layers.push(
           new ScatterplotLayer({
             id: "vehicle-line",
-            data: f.vehicles,
-            getPosition: (v: SnapshotMeta["vehicles"][number]) => [v.lon, v.lat],
+            data: vehs,
+            getPosition: (_v: SnapshotMeta["vehicles"][number], { index }: { index: number }) => vpos[index],
             getFillColor: (v: SnapshotMeta["vehicles"][number]) => [v.color[0], v.color[1], v.color[2], 220],
             getRadius: 7,
             radiusUnits: "pixels",
             radiusMinPixels: 5.5,
             parameters: { depthTest: false },
-            updateTriggers: { getPosition: f.vehicles, getFillColor: f.vehicles },
+            updateTriggers: { getPosition: now, getFillColor: vehs },
           }),
         );
         // the train, coloured 1..5 by how packed it is right now
         layers.push(
           new IconLayer({
             id: "vehicles",
-            data: f.vehicles,
+            data: vehs,
             getIcon: (v: SnapshotMeta["vehicles"][number]) =>
               v.road ? TRUCK[v.crowd] ?? TRUCK[1] : TRAIN[v.crowd] ?? TRAIN[1],
-            getPosition: (v: SnapshotMeta["vehicles"][number]) => [v.lon, v.lat],
+            getPosition: (_v: SnapshotMeta["vehicles"][number], { index }: { index: number }) => vpos[index],
             getSize: (v: SnapshotMeta["vehicles"][number]) => (v.road ? 15 : 18) + (v.crowd - 1) * 1.6,
             sizeUnits: "pixels",
             sizeMinPixels: 12,
             billboard: true,
             parameters: { depthTest: false },
-            updateTriggers: { getIcon: f.vehicles, getSize: f.vehicles, getPosition: f.vehicles },
+            updateTriggers: { getIcon: vehs, getSize: vehs, getPosition: now },
           }),
         );
       }
