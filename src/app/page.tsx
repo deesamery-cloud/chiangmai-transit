@@ -342,6 +342,7 @@ export default function Page() {
   };
 
   const perLineById = new Map<string, PerLine>((meta?.perLine ?? []).map((p) => [p.id, p]));
+  const selLine = selectedLineId ? lines.find((l) => l.id === selectedLineId) ?? null : null; // for the bottom edit strip
   const goalDef = goal ? GOALS[goal] : null;
   const t = (en: string, th: string) => (lang === "th" ? th : en);
   const toggleLang = () =>
@@ -814,7 +815,9 @@ export default function Page() {
                         {util}%
                       </span>
                     </button>
-                    {/* per-line performance + ALWAYS-VISIBLE add/remove vehicle stepper */}
+                    {/* per-line performance — crowding · waiting · riding. Click the
+                        row to select; edit controls (add vehicle / fare / remove)
+                        appear in the bottom bar so all build actions live together. */}
                     <div className="mt-0.5 flex items-center gap-2 pl-[18px] text-[10px]">
                       <span
                         className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] text-[8px] font-bold text-white"
@@ -826,87 +829,9 @@ export default function Page() {
                       <span style={{ color: (pl?.waiting ?? 0) > 50 ? "var(--danger)" : "var(--muted)" }}>
                         🧍 {ppl(pl?.waiting ?? 0)} {t("wait", "รอ")}
                       </span>
-                      {/* add a train / songthaew right here — no need to expand the line */}
-                      <span className="ml-auto inline-flex items-center gap-0.5">
-                        <button
-                          className="rounded bg-[var(--fill-2)] px-1 leading-none hover:bg-[var(--fill-3)] disabled:opacity-30"
-                          onClick={() => sim.setFleet(l.id, l.fleet - 1)}
-                          disabled={l.fleet <= 1}
-                          title={t("Remove a vehicle", "ลดคันรถ")}
-                        >
-                          −
-                        </button>
-                        <span className="w-7 text-center font-mono" title={t(`${l.fleet}/${MAX_FLEET} vehicles`, `${l.fleet}/${MAX_FLEET} คัน`)}>
-                          {l.mode === "metro" ? "🚆" : "🛻"}{l.fleet}
-                        </span>
-                        <button
-                          className="rounded px-1 font-bold leading-none disabled:opacity-30"
-                          style={{ background: l.fleet >= MAX_FLEET ? "var(--fill-2)" : "var(--accent)", color: l.fleet >= MAX_FLEET ? "var(--muted)" : "var(--accent-ink)" }}
-                          onClick={() => sim.setFleet(l.id, l.fleet + 1)}
-                          disabled={l.fleet >= MAX_FLEET}
-                          title={t(l.mode === "metro" ? "Add a train" : "Add a songthaew", l.mode === "metro" ? "เพิ่มขบวนรถไฟฟ้า" : "เพิ่มรถสองแถว")}
-                        >
-                          ＋
-                        </button>
-                      </span>
+                      <span className="text-[var(--muted)]">{l.mode === "metro" ? "🚆" : "🛻"}{l.fleet}</span>
+                      {sel && <span className="ml-auto font-medium text-[var(--accent)]">{t("editing ↓", "แก้ไขด้านล่าง ↓")}</span>}
                     </div>
-                    {sel && (
-                      <div className="mt-1.5 flex flex-col gap-1.5 pl-[18px]">
-                        <div className="flex items-center gap-1.5 text-[11px]">
-                          <span className="text-[var(--muted)]">
-                            {l.mode === "metro" ? t("Trains", "ขบวน") : t("Trucks", "คันรถ")} {l.fleet}/{MAX_FLEET}
-                            <span className="text-[10px]"> · {t("use ＋ above to add", "กด ＋ ด้านบนเพื่อเพิ่ม")}</span>
-                          </span>
-                          <button
-                            className="ml-auto text-[var(--muted)] hover:text-[var(--danger)]"
-                            onClick={() => {
-                              pushUndo();
-                              sim.removeLine(l.id);
-                              setSelectedLineId(null);
-                            }}
-                          >
-                            remove ✕
-                          </button>
-                        </div>
-                        {/* fare — a demand lever: ↑ fare = more revenue, fewer riders */}
-                        <div className="flex items-center gap-1.5 text-[11px]">
-                          <span className="text-[var(--muted)]">{t("Fare", "ค่าโดยสาร")}</span>
-                          <button
-                            className="rounded bg-[var(--fill-2)] px-1.5 leading-none hover:bg-[var(--fill-3)] disabled:opacity-30"
-                            onClick={() => sim.setFare(l.id, l.fare - 5)}
-                            disabled={l.fare <= 5}
-                          >
-                            −
-                          </button>
-                          <span className="w-10 text-center font-mono">฿{l.fare}</span>
-                          <button
-                            className="rounded bg-[var(--fill-2)] px-1.5 leading-none hover:bg-[var(--fill-3)] disabled:opacity-30"
-                            onClick={() => sim.setFare(l.id, l.fare + 5)}
-                            disabled={l.fare >= 100}
-                          >
-                            +
-                          </button>
-                          <span className="ml-auto text-[10px] text-[var(--muted)]">{t("↑ revenue · ↓ riders", "↑ รายได้ · ↓ คน")}</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {LINE_COLORS.map((c) => (
-                            <button
-                              key={c.name}
-                              title={c.name}
-                              onClick={() => sim.setLineColor(l.id, c.rgb)}
-                              className="h-4 w-4 rounded-full"
-                              style={{
-                                background: rgb(c.rgb),
-                                outline:
-                                  l.color.join(",") === c.rgb.join(",")
-                                    ? "2px solid var(--ink)"
-                                    : "1px solid rgba(46,33,19,.28)",
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -1264,6 +1189,59 @@ export default function Page() {
             <button className="btn" onClick={cancelRoute}>
               Cancel
             </button>
+          </>
+        )}
+
+        {/* ▶ selected-line edit strip — click a line, then add vehicles / set fare / recolor / remove, all down here */}
+        {selLine && tool !== "track" && tool !== "route" && tool !== "station" && (
+          <>
+            <div className="mx-1 h-7 w-px bg-[var(--line)]" />
+            <span
+              className="btn"
+              style={{ background: rgb(selLine.color), color: "#fff", borderColor: "transparent", cursor: "default" }}
+            >
+              {selLine.mode === "metro" ? "🚆" : "🛻"} {MODE_PARAMS[selLine.mode].label}
+            </span>
+            {/* add / remove a vehicle — the prominent "เพิ่มขบวน / เพิ่มรถสองแถว" */}
+            <div className="flex items-center gap-1">
+              <button className="btn" onClick={() => sim.setFleet(selLine.id, selLine.fleet - 1)} disabled={selLine.fleet <= 1} title={t("Remove a vehicle", "ลดคันรถ")}>−</button>
+              <span className="w-12 text-center font-mono text-[12px]">{selLine.mode === "metro" ? "🚆" : "🛻"}{selLine.fleet}/{MAX_FLEET}</span>
+              <button
+                className="btn btn-accent"
+                onClick={() => sim.setFleet(selLine.id, selLine.fleet + 1)}
+                disabled={selLine.fleet >= MAX_FLEET}
+                title={t("Add a vehicle to this line", "เพิ่มคันรถในสายนี้")}
+              >
+                ＋ {t(selLine.mode === "metro" ? "Train" : "Songthaew", selLine.mode === "metro" ? "ขบวน" : "สองแถว")}
+              </button>
+            </div>
+            {/* fare */}
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-[var(--muted)]">{t("Fare", "ค่าโดยสาร")}</span>
+              <button className="btn" onClick={() => sim.setFare(selLine.id, selLine.fare - 5)} disabled={selLine.fare <= 5}>−</button>
+              <span className="w-9 text-center font-mono text-[11px]">฿{selLine.fare}</span>
+              <button className="btn" onClick={() => sim.setFare(selLine.id, selLine.fare + 5)} disabled={selLine.fare >= 100}>+</button>
+            </div>
+            {/* recolor */}
+            <span className="flex items-center gap-1">
+              {LINE_COLORS.map((c) => (
+                <button
+                  key={c.name}
+                  title={c.name}
+                  onClick={() => sim.setLineColor(selLine.id, c.rgb)}
+                  className="h-4 w-4 rounded-full"
+                  style={{ background: rgb(c.rgb), outline: selLine.color.join(",") === c.rgb.join(",") ? "2px solid var(--ink)" : "1px solid rgba(46,33,19,.28)" }}
+                />
+              ))}
+            </span>
+            <button
+              className="btn"
+              onClick={() => { pushUndo(); sim.removeLine(selLine.id); setSelectedLineId(null); }}
+              title={t("Remove this line", "รื้อถอนสายนี้")}
+            >
+              🗑️ {t("Remove", "รื้อถอน")}
+            </button>
+            <button className="btn" onClick={() => setSelectedLineId(null)} title={t("Close", "ปิด")}>✕</button>
           </>
         )}
       </div>
