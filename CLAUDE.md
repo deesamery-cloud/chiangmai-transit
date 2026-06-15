@@ -85,6 +85,10 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
 - **Build flow**: finishing a line (`finishRail`/`finishRoute`) auto-selects it + drops to Pan so the
   bottom edit strip (＋ vehicle / fare / recolour / remove) appears immediately. `addLine`/
   `addLineFromStations` guard cap+budget synchronously (via `linesRef`) and return the new line.
+  You can re-edit a line ANY time: clicking its row in YOUR NETWORK selects it + drops to Pan + clears
+  any draft, so the strip reliably reappears (the strip is gated off during build tools). A row is
+  "active" (click again to deselect) only when selected AND already in Pan — so coming back to add
+  trains never accidentally toggles a still-selected-but-hidden line off.
 
 ## Design system
 `design-system/` holds self-contained HTML preview cards mirrored to a **claude.ai/design**
