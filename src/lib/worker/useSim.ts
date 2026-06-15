@@ -235,16 +235,16 @@ export function useSim(): UseSim {
       if (!g || !router) return null;
       const l = buildLine(g, router, points, mode, color);
       if (!l) {
-        setNotice("Couldn't route that line — try points along connected streets.");
+        setNotice("ไม่พบเส้นทาง — ลองเลือกจุดบนถนนที่เชื่อมกัน · Couldn\u2019t route that line — try points along connected streets.");
         return null;
       }
       // synchronous guards (read refs) so we can return the new line immediately
       if (linesRef.current.filter((x) => x.mode === mode).length >= LINE_CAP[mode]) {
-        setNotice(`Max ${mode === "metro" ? "Metro" : "Songthaew"} lines reached (${LINE_CAP[mode]}).`);
+        setNotice(`ครบจำนวนสาย${mode === "metro" ? "รถไฟฟ้า" : "สองแถว"}แล้ว (${LINE_CAP[mode]}) · Max ${mode === "metro" ? "Metro" : "Songthaew"} lines reached.`);
         return null;
       }
       if (l.capex > budgetRef.current) {
-        setNotice(`Not enough budget — this ${mode} line costs ฿${(l.capex / 1e6).toFixed(1)}M.`);
+        setNotice(`งบไม่พอ — สายนี้ราคา ฿${(l.capex / 1e6).toFixed(1)}M · Not enough budget for this ${mode} line.`);
         return null;
       }
       setLines((prev) => {
@@ -263,16 +263,16 @@ export function useSim(): UseSim {
       if (!g || !router) return null;
       const l = buildLineFromStations(g, router, stations, mode, color);
       if (!l) {
-        setNotice("Couldn't route rail between those stations — pick stations on connected streets.");
+        setNotice("ต่อรางไม่ได้ — เลือกสถานีบนถนนที่เชื่อมกัน · Couldn\u2019t route rail between those stations — pick stations on connected streets.");
         return null;
       }
       // synchronous guards (read refs) so we can return the new line immediately
       if (linesRef.current.filter((x) => x.mode === mode).length >= LINE_CAP[mode]) {
-        setNotice(`Max ${mode === "metro" ? "Metro" : "Songthaew"} lines reached (${LINE_CAP[mode]}).`);
+        setNotice(`ครบจำนวนสาย${mode === "metro" ? "รถไฟฟ้า" : "สองแถว"}แล้ว (${LINE_CAP[mode]}) · Max ${mode === "metro" ? "Metro" : "Songthaew"} lines reached.`);
         return null;
       }
       if (l.capex > budgetRef.current) {
-        setNotice(`Not enough budget — this ${mode} line costs ฿${(l.capex / 1e6).toFixed(1)}M.`);
+        setNotice(`งบไม่พอ — สายนี้ราคา ฿${(l.capex / 1e6).toFixed(1)}M · Not enough budget for this ${mode} line.`);
         return null;
       }
       setLines((prev) => {
@@ -291,7 +291,7 @@ export function useSim(): UseSim {
       if (!g || !router) return null;
       const l = buildLineFromStations(g, router, stations, "metro", color, fleet, lineId);
       if (!l) {
-        setNotice("Couldn't route that — pick stations on connected streets.");
+        setNotice("เชื่อมไม่ได้ — เลือกสถานีบนถนนที่เชื่อมกัน · Couldn\u2019t route that — pick stations on connected streets.");
         return null;
       }
       setLines((prev) => {

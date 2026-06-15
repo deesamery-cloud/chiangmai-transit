@@ -221,10 +221,11 @@ export default function Page() {
     }
     pushUndo();
     const nl = sim.addLine(routeDraft, "songthaew", LINE_COLORS[colorIdx].rgb);
-    playSfx("clack");
     setRouteDraft([]);
-    // auto-select the new feeder + drop to pan so the ＋ Add songthaew strip appears
+    // auto-select the new feeder + drop to pan so the ＋ Add songthaew strip appears.
+    // Only sound the success "clack" when the route actually built.
     if (nl) {
+      playSfx("clack");
       setSelectedLineId(nl.id);
       setTool("pan");
     }
@@ -330,12 +331,13 @@ export default function Page() {
         if (nl) builtId = nl.id;
       }
     }
-    playSfx("clack");
     setChain([]);
     setSnapWarn(false);
     // auto-select the line you just built + drop to pan, so the bottom edit
-    // strip (＋ Add train / fare / remove) appears immediately
+    // strip (＋ Add train / fare / remove) appears immediately. Only sound the
+    // success "clack" when a line was actually created (not on a failed build).
     if (builtId) {
+      playSfx("clack");
       setSelectedLineId(builtId);
       setTool("pan");
     }
@@ -657,8 +659,10 @@ export default function Page() {
               <LannaEmblem size={16} /> เชียงใหม่ Transit
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] uppercase text-[var(--muted)]">
-                {DIFFICULTIES[difficulty].icon} {goal ? t(goalDef?.label ?? "free", goalTh[goal].label) : "free"} ·{" "}
+              <span className="text-[11px] text-[var(--muted)]">
+                {DIFFICULTIES[difficulty].icon}{" "}
+                <span className="uppercase tracking-wide opacity-70">{t("goal", "เป้า")}:</span>{" "}
+                {goal ? t(goalDef?.label ?? "free", goalTh[goal].label) : "free"} ·{" "}
                 {t("day", "วัน")} {meta?.day ?? 0}
                 {deadlineDays != null && <span style={{ color: meta && meta.day > deadlineDays - 10 ? "var(--warn)" : undefined }}>/{deadlineDays}</span>}
               </span>
@@ -669,7 +673,7 @@ export default function Page() {
           </div>
           <div className="mt-1 flex items-end justify-between">
             <div>
-              <div className="font-mono text-2xl tabular-nums leading-none">{meta ? clock(meta.simTime) : "--:--"}</div>
+              <div className="font-mono text-base tabular-nums leading-none text-[var(--muted)]">{meta ? clock(meta.simTime) : "--:--"}</div>
               {meta && <div className="mt-0.5 text-[10.5px] text-[var(--muted)]">{peakBadge}</div>}
               {meta?.activeEvent && (() => {
                 const ev = EVENTS.find((e) => e.id === meta.activeEvent!.id);
@@ -681,7 +685,7 @@ export default function Page() {
               })()}
             </div>
             <div className="text-right">
-              <div className="font-mono text-lg tabular-nums" style={{ color: meta && meta.budget < 0 ? "var(--danger)" : "var(--accent)" }}>
+              <div className="font-mono text-base tabular-nums" style={{ color: meta && meta.budget < 0 ? "var(--danger)" : "var(--accent)" }}>
                 {meta ? money(meta.budget) : "…"}
               </div>
               {meta && meta.budget < 0 && (
@@ -701,7 +705,7 @@ export default function Page() {
                 title={`City Score = (68% demand served + 18% coverage + 14% traffic relief) × satisfaction\nDemand served ${Math.round(odServed * 100)}% of travel corridors (need ~42% for full credit) → ${Math.round(odScoreFrac * 100)}/100\nCoverage ${Math.round(coverageFrac * 100)}% → ${Math.round(coverageScore * 100)}/100\nTraffic relief ${Math.round(trafficReliefFrac * 100)}/100 (traffic ${congestion}%)\nRider satisfaction ${meta?.satisfaction ?? 100}% (crowding + waits cap your grade)`}
               >
                 <div
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg font-bold"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-3xl font-bold shadow-sm"
                   style={{ background: grade.c, color: "var(--accent-ink)" }}
                 >
                   {grade.g}
@@ -714,7 +718,7 @@ export default function Page() {
                         <span className="ml-1 text-[var(--accent)]">· {t("goal", "เป้า")} ≥{gradeGoalTarget}</span>
                       )}
                     </span>
-                    <span className="font-mono tabular-nums">{cityScore}/100</span>
+                    <span className="font-mono text-lg font-semibold tabular-nums leading-none text-[var(--text)]">{cityScore}<span className="text-[11px] text-[var(--muted)]">/100</span></span>
                   </div>
                   <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--fill-2)]">
                     <div className="h-full rounded-full" style={{ width: `${cityScore}%`, background: grade.c }} />
@@ -972,13 +976,14 @@ export default function Page() {
           try { localStorage.setItem("cm-onboarded", "1"); } catch {}
         };
         const next = () => (coachAdv >= TOTAL ? dismiss() : setCoachAdv((s) => s + 1));
+        const b = (en: string, th: string) => <b className="text-[var(--text)]">{t(en, th)}</b>;
         const beats: Record<number, [ReactNode, ReactNode]> = {
-          1: [<b key="t">วางสถานี · Place stations</b>, <>คลิก <b className="text-[var(--text)]">🚉 วางสถานี</b> แล้วคลิกบนถนน ≥2 จุด · Click 🚉, then click 2+ road spots.</>],
-          2: [<b key="t">วางราง · Lay track</b>, <>คลิก <b className="text-[var(--text)]">🛤️ วางราง</b> เชื่อมสถานี แล้วกด <b className="text-[var(--text)]">✓ Finish</b> · click 🛤️, connect stations, press ✓ Finish.</>],
-          3: [<b key="t" style={{ color: "var(--ride)" }}>🎉 เส้นทางแรกวิ่งแล้ว! · Your first line runs!</b>, <>Watch commuters switch off the roads. Now let&apos;s grow it.</>],
-          4: [<b key="t">🎯 ความต้องการเดินทาง · Travel demand</b>, <>Open <b className="text-[var(--text)]">🎯 Demand</b> — the red &quot;still driving&quot; corridors are <i>why your grade is low</i>. Click one to see it on the map, then build toward it.</>],
-          5: [<b key="t">💰 ค่าโดยสาร · Fares</b>, <>Click a line in <b className="text-[var(--text)]">Your Network</b> and set its <b className="text-[var(--text)]">Fare</b> — raise it to shed crowding &amp; earn more, lower it to attract riders.</>],
-          6: [<b key="t">🛻 สองแถว · Songthaew feeders</b>, <>Switch to <b className="text-[var(--text)]">🛻 Songthaew</b> and <b className="text-[var(--text)]">draw a cheap route</b> feeding a metro station — last-mile coverage where a trunk isn&apos;t worth it.</>],
+          1: [<b key="t">{t("Place stations", "วางสถานี")}</b>, <>{t("Pick ", "เลือก ")}{b("🚉 Place stations", "🚉 วางสถานี")}{t(", then click 2+ spots on the streets.", " แล้วคลิกบนถนนอย่างน้อย 2 จุด")}</>],
+          2: [<b key="t">{t("Connect stations", "เชื่อมสถานี")}</b>, <>{t("Pick ", "เลือก ")}{b("🛤️ Connect stations", "🛤️ เชื่อมสถานี")}{t(", click your stations in order, then press ", " คลิกสถานีตามลำดับ แล้วกด ")}{b("✓ Finish", "✓ เสร็จ")}.</>],
+          3: [<b key="t" style={{ color: "var(--ride)" }}>{t("🎉 Your first line runs!", "🎉 เส้นทางแรกวิ่งแล้ว!")}</b>, <>{t("Watch commuters switch off the roads. Now let’s grow it.", "ดูผู้คนเปลี่ยนจากถนนมาขึ้นรถ ทีนี้มาขยายเครือข่ายกัน")}</>],
+          4: [<b key="t">{t("🎯 Travel demand", "🎯 ความต้องการเดินทาง")}</b>, <>{t("Open ", "เปิด ")}{b("🎯 Demand", "🎯 อุปสงค์")}{t(" — the red “still driving” corridors are why your grade is low. Click one to see it on the map, then build toward it.", " — เส้นสีแดง “ยังขับรถ” คือเหตุผลที่เกรดต่ำ คลิกดูบนแผนที่ แล้วสร้างไปหามัน")}</>],
+          5: [<b key="t">{t("💰 Fares", "💰 ค่าโดยสาร")}</b>, <>{t("Click a line in ", "คลิกสายใน ")}{b("Your Network", "เครือข่ายของคุณ")}{t(" and set its Fare — raise it to shed crowding & earn more, lower it to attract riders.", " แล้วตั้งค่าโดยสาร — ขึ้นเพื่อลดความแออัดและเพิ่มรายได้ ลดเพื่อดึงผู้โดยสาร")}</>],
+          6: [<b key="t">{t("🛻 Songthaew feeders", "🛻 สองแถวสายรอง")}</b>, <>{t("Switch to ", "สลับไป ")}{b("🛻 Songthaew", "🛻 สองแถว")}{t(" and draw a cheap route feeding a metro station — last-mile coverage where a trunk isn’t worth it.", " แล้ววาดเส้นทางราคาถูกป้อนเข้าสถานีรถไฟฟ้า — เก็บระยะสุดท้ายที่ไม่คุ้มจะวางสายหลัก")}</>],
         };
         const [title, body] = beats[step] ?? beats[1];
         return (
@@ -1056,10 +1061,10 @@ export default function Page() {
                 onClick={() => pickTool(tl.id)}
                 disabled={!ready || locked}
                 style={on ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
-                title={locked ? "Place 2+ stations first (🚉)" : `${tl.en} — ${tl.hint}`}
+                title={locked ? t("Place 2+ stations first (🚉)", "วางสถานีอย่างน้อย 2 จุดก่อน (🚉)") : `${t(tl.en, tl.th)} — ${tl.hint}`}
               >
                 <span>{tl.icon}</span>
-                <span className="text-[11px]">{tl.th}</span>
+                <span className="text-[11px]">{t(tl.en, tl.th)}</span>
               </button>
             );
           })}
@@ -1118,10 +1123,13 @@ export default function Page() {
             <div className="mx-1 h-7 w-px bg-[var(--line)]" />
             <span className="px-1 text-[11px]">
               {snapWarn ? (
-                <span className="text-[var(--accent)]">แตะบนถนน ✦ tap a street</span>
+                <span className="text-[var(--accent)]">{t("✦ Tap on a street", "✦ แตะบนถนน")}</span>
               ) : (
                 <span className="text-[var(--muted)]">
-                  คลิกถนนเพื่อวางสถานี · {stations.length} สถานี — แล้วเลือก 🛤️ วางราง เพื่อเชื่อม
+                  {t(
+                    `Click streets to drop stations · ${stations.length} placed — then pick 🛤️ Connect stations`,
+                    `คลิกถนนเพื่อวางสถานี · ${stations.length} สถานี — แล้วเลือก 🛤️ เชื่อมสถานี`,
+                  )}
                 </span>
               )}
             </span>
@@ -1154,7 +1162,9 @@ export default function Page() {
               ))}
             </span>
             <span className="px-1 text-[11px] text-[var(--muted)]">
-              {stations.length < 2 ? "วางสถานีอย่างน้อย 2 จุดก่อน" : "คลิก/ลากเชื่อมสถานี"} · {railDraft.length}
+              {stations.length < 2
+                ? t("Place 2+ stations first", "วางสถานีอย่างน้อย 2 จุดก่อน")
+                : t("Click stations in order to connect", "คลิกสถานีตามลำดับเพื่อเชื่อม")} · {railDraft.length}
             </span>
             <button className="btn" onClick={() => setChain((c) => c.slice(0, -1))} disabled={!railDraft.length}>
               ↶ Undo

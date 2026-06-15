@@ -42,7 +42,17 @@
   --color-muted: var(--muted);
   --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Geist Mono has no ฿ (baht) glyph — append a Thai-capable fallback so currency
+     renders ฿ instead of a tofu/"B" while digits stay monospaced. */
+  --font-mono: var(--font-geist-mono), var(--font-thai), "Noto Sans Thai", ui-monospace, monospace;
+}
+
+/* Figure-ground: mute the warm OpenFreeMap basemap so the player's network,
+   agents and heat layers (which own the warm palette) read on top of it. This
+   targets ONLY the MapLibre raster canvas — the deck.gl overlay is a separate
+   canvas and stays full-saturation. */
+.maplibregl-canvas {
+  filter: saturate(0.6) brightness(1.05);
 }
 
 html,

@@ -395,7 +395,7 @@ export const STATE_COLOR: Record<number, [number, number, number, number]> = {
   1: [255, 255, 255, 200], // waiting  – white
   2: [80, 240, 170, 255], // in-vehicle – bright green (the "win" state)
   3: [120, 140, 165, 38], // dwelling – barely there
-  4: [255, 150, 85, 120], // driving  – light orange, translucent (cars / traffic)
+  4: [226, 70, 55, 140], // driving  – saturated cinnabar red (cars / traffic): reads as red on the muted map instead of blending with the road's orange
 };
 
 export const MAP = {
@@ -417,7 +417,7 @@ export type Tool = "pan" | "station" | "track" | "demolish" | "route";
 export const TOOLS: { id: Tool; icon: string; th: string; en: string; hint: string }[] = [
   { id: "pan", icon: "🖐️", th: "เลื่อนแผนที่", en: "Pan", hint: "Drag to move the map" },
   { id: "station", icon: "🚉", th: "วางสถานี", en: "Place stations", hint: "Click to drop stations; track routes between them" },
-  { id: "track", icon: "🛤️", th: "วางราง", en: "Lay track", hint: "Click or drag along roads to trace the line" },
+  { id: "track", icon: "🛤️", th: "เชื่อมสถานี", en: "Connect stations", hint: "Click your placed stations in order, then press Finish" },
   { id: "demolish", icon: "🗑️", th: "รื้อถอน", en: "Demolish", hint: "Click a line/route to remove it" },
 ];
 // Songthaew route tool (drawn freely along roads).

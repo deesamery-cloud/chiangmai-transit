@@ -1,0 +1,24 @@
+import { chromium } from "playwright-core";
+const URL = process.env.CM_URL || "http://localhost:3000";
+const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const browser = await chromium.launch({ headless: true, executablePath: CHROME, args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--ignore-gpu-blocklist"] });
+const ctx = await browser.newContext({ viewport: { width: 1366, height: 850 }, deviceScaleFactor: 1 });
+await ctx.addInitScript(() => localStorage.setItem("cm-onboarded","1"));
+const page = await ctx.newPage();
+await page.goto(URL,{waitUntil:"load",timeout:60000});
+await page.waitForFunction(()=>/Pick a goal|เลือกเป้าหมาย/.test(document.body.innerText),{timeout:60000}).catch(()=>{});
+await page.getByText(/Grade A City|เมืองเกรด A/).click();
+await page.waitForSelector("canvas",{timeout:30000}); await page.waitForTimeout(2500);
+await page.getByRole("button",{name:/วางสถานี/}).click();
+const pts=[[560,420],[680,418],[800,430]];
+for(const[x,y]of pts){await page.mouse.click(x,y);await page.waitForTimeout(160);}
+await page.getByRole("button",{name:/วางราง/}).click();
+await page.waitForTimeout(200);
+for(const[x,y]of pts){await page.mouse.click(x,y);await page.waitForTimeout(150);}
+const fin=page.getByRole("button",{name:/✓ Finish/}); if(await fin.isEnabled().catch(()=>false))await fin.click();
+await page.waitForTimeout(1500);
+// crop the bottom strip directly from a full buffer via clip but deviceScaleFactor=1 + no animations wait
+const buf = await page.screenshot({ clip:{x:0,y:690,width:1366,height:150} });
+const fs = await import("fs"); fs.writeFileSync("/tmp/priya-6-editstrip.png", buf);
+console.log("OK wrote editstrip", buf.length);
+await browser.close();
