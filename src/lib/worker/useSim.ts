@@ -93,7 +93,7 @@ export function useSim(): UseSim {
     linesRef.current = lines;
   }, [lines]);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeedState] = useState(60);
+  const [speed, setSpeedState] = useState(1); // start at 1× — the player speeds up time deliberately
   const [graph, setGraphState] = useState<Graph | null>(null);
   const [zones, setZones] = useState<ZoneData | null>(null);
   const [pois, setPois] = useState<PoiData | null>(null);

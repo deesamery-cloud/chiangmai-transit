@@ -7,7 +7,7 @@ import type { FromWorker, ToWorker } from "@/lib/types";
 let engine: SimEngine | null = null;
 let agentCount = 0;
 let playing = false;
-let speed = 60;
+let speed = 1; // default 1× (matches useSim's initial speed state)
 let timer: ReturnType<typeof setInterval> | null = null;
 
 const post = (msg: FromWorker, transfer?: Transferable[]) => {

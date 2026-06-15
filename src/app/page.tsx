@@ -61,8 +61,8 @@ export default function Page() {
   const [buildMode, setBuildMode] = useState<"metro" | "songthaew">("metro"); // which mode the build tools build
   const [routeDraft, setRouteDraft] = useState<{ lon: number; lat: number }[]>([]); // songthaew route waypoints
   const [showDensity, setShowDensity] = useState(false); // 🔥 population-density heat overlay
-  const [showAgents, setShowAgents] = useState(true); // 👣 commuter dots (walk/drive/ride) overlay
-  const [showOD, setShowOD] = useState(true); // 🎯 travel-demand panel open/closed
+  const [showAgents, setShowAgents] = useState(false); // 👣 commuter dots (walk/drive/ride = traffic) — OFF by default for a clean starting map
+  const [showOD, setShowOD] = useState(false); // 🎯 travel-demand panel — OFF by default; player opens it when planning
   const [selectedOD, setSelectedOD] = useState<ODCorridor | null>(null); // a corridor highlighted on the map
   const [seed, setSeed] = useState(100000); // per-run seed (randomised on mount to avoid an SSR/client mismatch)
   const [zen, setZen] = useState(false); // minimal HUD: map + grade + palette only
