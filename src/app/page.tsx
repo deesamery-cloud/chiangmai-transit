@@ -814,7 +814,7 @@ export default function Page() {
                         {util}%
                       </span>
                     </button>
-                    {/* per-line performance — always visible: crowding · waiting · riding */}
+                    {/* per-line performance + ALWAYS-VISIBLE add/remove vehicle stepper */}
                     <div className="mt-0.5 flex items-center gap-2 pl-[18px] text-[10px]">
                       <span
                         className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] text-[8px] font-bold text-white"
@@ -826,27 +826,37 @@ export default function Page() {
                       <span style={{ color: (pl?.waiting ?? 0) > 50 ? "var(--danger)" : "var(--muted)" }}>
                         🧍 {ppl(pl?.waiting ?? 0)} {t("wait", "รอ")}
                       </span>
-                      <span className="text-[var(--muted)]">{l.mode === "metro" ? "🚆" : "🛻"} {ppl(pl?.riders ?? 0)} {t("riding", "บนรถ")}</span>
+                      {/* add a train / songthaew right here — no need to expand the line */}
+                      <span className="ml-auto inline-flex items-center gap-0.5">
+                        <button
+                          className="rounded bg-[var(--fill-2)] px-1 leading-none hover:bg-[var(--fill-3)] disabled:opacity-30"
+                          onClick={() => sim.setFleet(l.id, l.fleet - 1)}
+                          disabled={l.fleet <= 1}
+                          title={t("Remove a vehicle", "ลดคันรถ")}
+                        >
+                          −
+                        </button>
+                        <span className="w-7 text-center font-mono" title={t(`${l.fleet}/${MAX_FLEET} vehicles`, `${l.fleet}/${MAX_FLEET} คัน`)}>
+                          {l.mode === "metro" ? "🚆" : "🛻"}{l.fleet}
+                        </span>
+                        <button
+                          className="rounded px-1 font-bold leading-none disabled:opacity-30"
+                          style={{ background: l.fleet >= MAX_FLEET ? "var(--fill-2)" : "var(--accent)", color: l.fleet >= MAX_FLEET ? "var(--muted)" : "var(--accent-ink)" }}
+                          onClick={() => sim.setFleet(l.id, l.fleet + 1)}
+                          disabled={l.fleet >= MAX_FLEET}
+                          title={t(l.mode === "metro" ? "Add a train" : "Add a songthaew", l.mode === "metro" ? "เพิ่มขบวนรถไฟฟ้า" : "เพิ่มรถสองแถว")}
+                        >
+                          ＋
+                        </button>
+                      </span>
                     </div>
                     {sel && (
                       <div className="mt-1.5 flex flex-col gap-1.5 pl-[18px]">
                         <div className="flex items-center gap-1.5 text-[11px]">
-                          <span className="text-[var(--muted)]">{l.mode === "metro" ? t("Trains", "ขบวน") : t("Trucks", "คันรถ")}</span>
-                          <button
-                            className="rounded bg-[var(--fill-2)] px-1.5 leading-none hover:bg-[var(--fill-3)] disabled:opacity-30"
-                            onClick={() => sim.setFleet(l.id, l.fleet - 1)}
-                            disabled={l.fleet <= 1}
-                          >
-                            −
-                          </button>
-                          <span className="w-4 text-center font-mono">{l.fleet}</span>
-                          <button
-                            className="rounded bg-[var(--fill-2)] px-1.5 leading-none hover:bg-[var(--fill-3)] disabled:opacity-30"
-                            onClick={() => sim.setFleet(l.id, l.fleet + 1)}
-                            disabled={l.fleet >= MAX_FLEET}
-                          >
-                            +
-                          </button>
+                          <span className="text-[var(--muted)]">
+                            {l.mode === "metro" ? t("Trains", "ขบวน") : t("Trucks", "คันรถ")} {l.fleet}/{MAX_FLEET}
+                            <span className="text-[10px]"> · {t("use ＋ above to add", "กด ＋ ด้านบนเพื่อเพิ่ม")}</span>
+                          </span>
                           <button
                             className="ml-auto text-[var(--muted)] hover:text-[var(--danger)]"
                             onClick={() => {
