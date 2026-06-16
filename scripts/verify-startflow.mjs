@@ -10,28 +10,28 @@ const txt = () => page.evaluate(()=>document.body.innerText.replace(/\s+/g," "))
 
 await page.goto(URL,{waitUntil:"load",timeout:60000}); await page.waitForTimeout(1200);
 
-// 1) start screen: 3 steps in order + seed/dice hidden
+// 1) RPG mode-select: path hero + start-from + difficulty deck + seed hidden
 const t0 = await txt();
-console.log("[start] step 1·Goal:", /1 · Goal|1 · เป้าหมาย/.test(t0)?"✓":"✗");
-console.log("[start] step 2·Start from:", /2 · Start from|2 · เริ่มจาก/.test(t0)?"✓":"✗");
-console.log("[start] step 3·Difficulty:", /3 · Difficulty|3 · ระดับความยาก/.test(t0)?"✓":"✗");
+console.log("[start] RPG 'Choose your path' hero:", /Choose your path|เลือกเส้นทาง/.test(t0)?"✓":"✗");
+console.log("[start] 4 goal tiles:", ["Win the Cars|เอาชนะรถยนต์","Transit Tycoon|เจ้าพ่อขนส่ง","Grade A City|เมืองเกรด A","Free Build|สร้างอิสระ"].every(r=>new RegExp(r).test(t0))?"✓":"✗");
+console.log("[start] Start-from + Difficulty deck:", /Start from|เริ่มจาก/i.test(t0) && /Difficulty|ความยาก/i.test(t0)?"✓":"✗");
 console.log("[start] existing-songthaew option:", /Existing songthaew|ระบบสองแถวที่มีอยู่/.test(t0)?"✓":"✗");
 console.log("[start] seed/dice HIDDEN:", /🎲|re-roll|สุ่มใหม่|Seed|ซีด/.test(t0)?"✗ still shown":"✓ hidden");
 // Start disabled until a goal is picked
-const startBtn = page.getByRole("button",{name:/Start building|เริ่มสร้างเมือง|Pick a goal first|เลือกเป้าหมายก่อน/});
+const startBtn = page.getByRole("button",{name:/Begin your term|เริ่มวาระ|Pick a goal|เลือกเป้าหมาย/});
 console.log("[start] Start disabled before goal:", await startBtn.first().isDisabled().catch(()=>null)===true?"✓":"⚠");
 
 // 2) pick goal (Free Build — no win overlay) + "existing songthaew", then Start
 await page.getByText(/Free Build|สร้างอิสระ/).first().click(); await page.waitForTimeout(200);
 await page.getByText(/Existing songthaew|ระบบสองแถวที่มีอยู่/).first().click(); await page.waitForTimeout(200);
-await page.getByRole("button",{name:/Start building|เริ่มสร้างเมือง/}).first().click(); await page.waitForTimeout(500);
-const skip = page.getByRole("button",{name:/Skip ✕|ข้าม ✕/}); if(await skip.count()) await skip.first().click();
+await page.getByRole("button",{name:/Begin your term|เริ่มวาระ/}).first().click(); await page.waitForTimeout(500);
+const skip = page.getByRole("button",{name:/Skip intro ⏭|ข้ามฉาก ⏭/}); if(await skip.count()) await skip.first().click();
 await page.waitForSelector("canvas",{timeout:30000}); await page.waitForTimeout(2500);
 
-// 3) the real Chiang Mai songthaew network got seeded (lines now exist → 🛻 rows)
+// 3) the real Chiang Mai songthaew network got seeded — YOUR-NETWORK header "· N"
 const tGame = await txt();
-const songRows = (tGame.match(/🛻/g)||[]).length;
-console.log("[seed] existing songthaew network seeded:", songRows>0?`✓ (${songRows} 🛻 markers in HUD)`:"✗ none");
+const netCount = Number((tGame.match(/(?:YOUR NETWORK|เครือข่ายของคุณ)\s*·\s*(\d+)/)||[])[1] || 0);
+console.log("[seed] existing songthaew network seeded:", netCount>0?`✓ (${netCount} lines in YOUR NETWORK)`:"✗ none");
 
 // challenge: the existing songthaew net must NOT start at Grade A (it's a feeder)
 const cityScore = Number((tGame.match(/(\d+)\s*\/\s*100/)||[])[1] || 0);

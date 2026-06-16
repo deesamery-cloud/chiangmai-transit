@@ -16,6 +16,7 @@ import {
   type AdvisorId,
   type BriefTone,
 } from "@/lib/advisors";
+import { Icon } from "@/components/ui/Icon";
 import type { SnapshotMeta, TransitLine } from "@/lib/types";
 
 type Lang = "en" | "th";
@@ -82,18 +83,24 @@ export function AdvisorIntro({
   const advance = () => (step >= TOTAL ? onDone() : setStep((s) => s + 1));
 
   return (
-    <div className="cm-fade-in absolute inset-0 z-50 flex items-center justify-center bg-[rgba(42,28,14,0.62)] px-4">
-      <div className="panel panel-accent cm-pop-in relative w-[460px] max-w-[94vw] px-7 py-6">
+    // tap anywhere on the scrim to skip straight into the game (non-blocking);
+    // the card itself stops propagation so its buttons still step through.
+    <div
+      className="cm-fade-in absolute inset-0 z-50 flex items-center justify-center bg-[rgba(42,28,14,0.62)] px-4"
+      onClick={onDone}
+      role="presentation"
+    >
+      <div className="panel panel-accent cm-pop-in relative w-[460px] max-w-[94vw] px-7 py-6" onClick={(e) => e.stopPropagation()}>
         <button
-          className="absolute right-3 top-3 text-[11px] text-[var(--muted)] hover:text-[var(--text)]"
+          className="absolute right-3 top-3 rounded-full border border-[var(--border)] bg-[var(--fill)] px-2.5 py-1 text-[11px] font-medium text-[var(--text)] hover:bg-[var(--paper)]"
           onClick={onDone}
         >
-          {t("Skip ✕", "ข้าม ✕")}
+          {t("Skip intro ⏭", "ข้ามฉาก ⏭")}
         </button>
 
         {step === 0 ? (
           <div className="text-center">
-            <div className="text-3xl">🏛️</div>
+            <div style={{ color: "var(--gold-deep)" }}><Icon name="governor" size={34} /></div>
             <div className="wordmark mt-2 text-[20px] leading-snug" style={{ color: "var(--gold-deep)" }}>
               {t("You are the new Governor", "ท่านคือผู้ว่าราชการคนใหม่")}
             </div>
@@ -146,6 +153,9 @@ export function AdvisorIntro({
               style={{ background: i <= step ? "var(--accent)" : "var(--fill-2)" }}
             />
           ))}
+        </div>
+        <div className="mt-2 text-center text-[10px] text-[var(--muted)]">
+          {t("tap outside to skip", "แตะด้านนอกเพื่อข้าม")}
         </div>
       </div>
     </div>
@@ -299,10 +309,10 @@ export function AdvisorDock({
       )}
 
       {/* always-visible team strip — the 4 faces + view toggles underneath */}
-      <div className="panel pointer-events-auto flex flex-col gap-1.5 px-2.5 py-2">
+      <div className="panel panel-frame pointer-events-auto flex flex-col gap-1.5 px-2.5 py-2">
         <div className="flex items-end gap-2">
         <div className="mr-0.5 flex flex-col items-center justify-center self-stretch pr-1.5" style={{ borderRight: "1px solid var(--line)" }}>
-          <span className="text-[15px] leading-none">👥</span>
+          <span className="leading-none" style={{ color: "var(--gold-deep)" }}><Icon name="team" size={16} /></span>
           <span className="mt-0.5 text-[8.5px] leading-tight text-[var(--muted)]">{t("Team", "ทีม")}</span>
         </div>
         {ADVISORS.map((a) => (
@@ -332,7 +342,7 @@ export function AdvisorDock({
             onClick={onToggleAgents}
             title={t("Show/hide moving people (walk · drive · ride)", "แสดง/ซ่อนผู้คน (เดิน · ขับรถ · นั่งรถไฟ)")}
           >
-            👣 {t("People", "ผู้คน")}
+<Icon name="people" size={14} /> {t("People", "ผู้คน")}
           </button>
           <button
             className={`vtoggle ${showOD ? "vtoggle-on" : ""}`}
@@ -340,7 +350,7 @@ export function AdvisorDock({
             onClick={onToggleOD}
             title={t("Show/hide the travel-demand panel", "แสดง/ซ่อนแผงความต้องการเดินทาง")}
           >
-            🎯 {t("Demand", "ความต้องการ")}
+<Icon name="demand" size={14} /> {t("Demand", "ความต้องการ")}
           </button>
           <button
             className={`vtoggle ${showCoverage ? "vtoggle-on" : ""}`}
@@ -348,10 +358,10 @@ export function AdvisorDock({
             onClick={onToggleCoverage}
             title={t("Show/hide station coverage — metro ~800 m walk-shed, songthaew only ~200 m local hail", "แสดง/ซ่อนพื้นที่ครอบคลุม — รถไฟฟ้า ~800 ม. สองแถวแค่ ~200 ม. ใกล้บ้าน")}
           >
-            📐 {t("Coverage", "ครอบคลุม")}
+<Icon name="coverage" size={14} /> {t("Coverage", "ครอบคลุม")}
           </button>
           <button className="vtoggle" onClick={onToggleMuted} title={t("Sound on/off", "เสียง เปิด/ปิด")}>
-            {muted ? "🔇" : "🔊"}
+<Icon name={muted ? "mute" : "sound"} size={14} />
           </button>
         </div>
       </div>

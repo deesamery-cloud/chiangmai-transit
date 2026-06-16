@@ -21,12 +21,14 @@ import {
   ROUTE_TOOL,
   SIM,
   TOOLS,
+  TRAVEL,
   type Tool,
 } from "@/lib/config";
 import { playSfx, setSfxMuted } from "@/lib/sfx";
 import { AdvisorIntro, AdvisorDock } from "@/components/advisors/AdvisorPanels";
 import { CM_SONGTHAEW } from "@/lib/cm-songthaew";
 import { OpeningCinematic } from "@/components/cinematic/OpeningCinematic";
+import { Icon, type IconName } from "@/components/ui/Icon";
 
 const MapCanvas = dynamic(() => import("@/components/map/MapCanvas"), { ssr: false });
 
@@ -36,6 +38,16 @@ const rgb = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`;
 // per-line crowding 1..5 colours (match the train ramp) + a load→level helper
 const CROWD_COLORS = ["#2f8f6b", "#7fa53c", "#d9a441", "#c26a2a", "#b5462e"];
 const crowdOf = (utilPct: number) => (utilPct >= 90 ? 5 : utilPct >= 65 ? 4 : utilPct >= 40 ? 3 : utilPct >= 15 ? 2 : 1);
+const TOOL_ICON: Record<string, IconName> = { pan: "pan", station: "station", track: "track", demolish: "demolish", route: "track" };
+const modeIcon = (m: LineMode): IconName => (m === "metro" ? "metro" : "songthaew");
+// big cinematic photo per goal — the RPG mode-select tiles + featured backdrop
+const GOAL_PHOTO: Record<GoalKind, string> = {
+  cars: "/modeselect/cars.jpg",
+  money: "/modeselect/money.jpg",
+  grade: "/modeselect/grade.jpg",
+  free: "/modeselect/free.jpg",
+};
+const GOAL_ORDER: GoalKind[] = ["cars", "money", "grade", "free"];
 
 function clock(sec: number): string {
   const s = ((sec % 86400) + 86400) % 86400;
@@ -88,6 +100,7 @@ export default function Page() {
   const stationSeq = useRef(1);
   const [snapWarn, setSnapWarn] = useState(false);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [infoStation, setInfoStation] = useState<PlacedStation | null>(null); // station clicked to inspect its traffic
   const [colorIdx, setColorIdx] = useState(0);
   const [wonShown, setWonShown] = useState(false); // goal reached at least once
   const [showWin, setShowWin] = useState(false); // win overlay currently open
@@ -105,10 +118,12 @@ export default function Page() {
   // a face for that advisor's live advice (the team is the main advisory UI)
   const [showIntro, setShowIntro] = useState(false); // governor appointment cutscene
   const [showCinematic, setShowCinematic] = useState(true); // ~60s opening cinematic — plays every time you enter the game (skippable)
+  const [buildFlash, setBuildFlash] = useState<string | null>(null); // transient "line open" confirmation toast
   const [lang, setLang] = useState<"en" | "th">("en"); // TH/EN toggle
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   // start-screen wizard: pick goal → start-from (scratch / real songthaew) → difficulty → Start
   const [selGoal, setSelGoal] = useState<GoalKind | null>(null);
+  const [focusGoal, setFocusGoal] = useState<GoalKind | null>(null); // hovered goal → featured photo/hero
   const [buildSource, setBuildSource] = useState<"scratch" | "existing">("scratch");
   const seedExistingRef = useRef(false); // seed the real Chiang Mai songthaew network once ready
   // save/load: autosave the network; offer "resume" on the start screen
@@ -125,6 +140,13 @@ export default function Page() {
     const t = setTimeout(sim.dismissNotice, 3500);
     return () => clearTimeout(t);
   }, [sim.notice, sim.dismissNotice]);
+
+  // auto-clear the "line open" build confirmation toast
+  useEffect(() => {
+    if (!buildFlash) return;
+    const id = setTimeout(() => setBuildFlash(null), 3000);
+    return () => clearTimeout(id);
+  }, [buildFlash]);
 
   // pop the win overlay the first time the chosen goal is reached. Runs every
   // render and reads goalDoneRef (set below) so the hook order stays stable
@@ -225,6 +247,7 @@ export default function Page() {
     setChain([]);
     setRouteDraft([]);
     setSnapWarn(false);
+    setInfoStation(null);
     setTool(t);
   };
   const cancelDraw = () => {
@@ -256,6 +279,9 @@ export default function Page() {
       playSfx("clack");
       setSelectedLineId(nl.id);
       setTool("pan");
+      const conns = connectsTo(nl);
+      const link = conns > 0 ? t(` · 🔗 connects to ${conns} line${conns > 1 ? "s" : ""}`, ` · 🔗 เชื่อม ${conns} สาย`) : "";
+      setBuildFlash(t("✓ Songthaew route open — riders boarding…", "✓ เปิดเส้นทางสองแถวแล้ว — ผู้โดยสารกำลังขึ้นรถ…") + link);
     }
   };
   const cancelRoute = () => {
@@ -311,6 +337,9 @@ export default function Page() {
     return ids.map((id) => byId.get(id)).filter((s): s is PlacedStation => !!s);
   };
   // snapshot current network before a mutating action so it can be undone
+  // how many EXISTING lines a new line connects to (a stop within a transfer walk)
+  const connectsTo = (line: TransitLine) =>
+    lines.filter((o) => o.id !== line.id && line.stops.some((s) => o.stops.some((b) => haversine(s.lon, s.lat, b.lon, b.lat) <= TRAVEL.transferMaxM))).length;
   const pushUndo = () => setUndoStack((s) => [...s.slice(-19), { stations: [...stations], lines: [...lines] }]);
   const undo = () => {
     setUndoStack((s) => {
@@ -333,6 +362,7 @@ export default function Page() {
     const c0 = ids[0], cN = ids[ids.length - 1];
     let extended = false;
     let builtId: string | null = null;
+    let newLine: TransitLine | null = null;
     for (const line of lines) {
       const sids = line.stationIds;
       if (!sids || sids.length < 2) continue;
@@ -356,7 +386,7 @@ export default function Page() {
       const chosen = resolve(ids, stations);
       if (chosen.length >= 2) {
         const nl = sim.addLineFromStations(chosen, buildMode, LINE_COLORS[colorIdx].rgb);
-        if (nl) builtId = nl.id;
+        if (nl) { builtId = nl.id; newLine = nl; }
       }
     }
     setChain([]);
@@ -368,12 +398,18 @@ export default function Page() {
       playSfx("clack");
       setSelectedLineId(builtId);
       setTool("pan");
+      const conns = newLine ? connectsTo(newLine) : 0;
+      const link = conns > 0 ? t(` · 🔗 connects to ${conns} line${conns > 1 ? "s" : ""}`, ` · 🔗 เชื่อม ${conns} สาย`) : "";
+      setBuildFlash(extended
+        ? t("✓ Line extended — new stations live", "✓ ต่อสายแล้ว — สถานีใหม่เปิดให้บริการ")
+        : t("✓ Metro line open — riders boarding…", "✓ เปิดสายรถไฟฟ้าแล้ว — ผู้โดยสารกำลังขึ้นรถ…") + link);
     }
   };
   // Demolish ONE station: drop it, and re-route any line that used it through
   // the remaining stations (or remove the line if it falls below 2 stations).
   const demolishStation = (id: string) => {
     pushUndo();
+    setInfoStation(null);
     const remaining = stations.filter((s) => s.id !== id);
     for (const line of lines) {
       if (!line.stationIds || !line.stationIds.includes(id)) continue;
@@ -421,139 +457,146 @@ export default function Page() {
     return t(GOALS[g].targetLine, goalTh[g].target);
   };
 
-  // --- mode-select screen --------------------------------------------------
+  // --- RPG-style full-screen mode/difficulty select ------------------------
   if (!started) {
+    const featured = focusGoal ?? selGoal; // which goal's big photo + hero is shown
+    const diffTh: Record<Difficulty, string> = { easy: "ง่าย", medium: "ปานกลาง", challenge: "ท้าทาย", hard: "ยาก" };
+    const startNow = (g: GoalKind) => {
+      seedExistingRef.current = buildSource === "existing";
+      setShowIntro(true);
+      sim.startGame(g, difficulty, seed);
+    };
     return (
-      <main className="relative h-full w-full overflow-hidden">
-        {/* cinematic photo backdrop (the cinematic's final dusk title scene, so the
-            hand-off from "Begin your term" is seamless) + warm dark scrim */}
-        <div className="absolute inset-0 z-0" style={{ background: "var(--bg-2)" }}>
-          <div className="cm-bg-drift absolute inset-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+      <main className="relative h-full w-full overflow-hidden bg-black">
+        {/* featured photo backdrop — crossfades as you hover / pick a goal */}
+        <div className="absolute inset-0 z-0">
+          {GOAL_ORDER.map((g) => (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
-              src="/cinematic/6.jpg"
+              key={g}
+              src={GOAL_PHOTO[g]}
               alt=""
-              className="h-full w-full object-cover"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
               draggable={false}
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+              className={`cm-bg-drift absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${featured === g ? "opacity-100" : "opacity-0"}`}
             />
-          </div>
-          <div className="absolute inset-0" style={{ background: "radial-gradient(120% 100% at 50% 22%, rgba(18,11,3,0.20) 0%, rgba(18,11,3,0.55) 66%, rgba(18,11,3,0.82) 100%)" }} />
+          ))}
+          {/* default backdrop (the cinematic's dusk title) when nothing is featured */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/cinematic/6.jpg" alt="" draggable={false} className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${featured ? "opacity-0" : "opacity-100"}`} />
+          <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(12,7,2,0.6) 0%, rgba(12,7,2,0.12) 30%, rgba(12,7,2,0.4) 58%, rgba(12,7,2,0.93) 100%)" }} />
         </div>
         <KranokCorners />
 
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 overflow-y-auto px-4 py-8">
-          {/* hero title over the photo — matches the cinematic's title card */}
-          <div className="cm-fade-in flex flex-col items-center text-center">
-            <LannaEmblem size={42} />
-            <div className="wordmark mt-1.5 text-[34px] leading-[1.1] drop-shadow-[0_3px_16px_rgba(0,0,0,0.9)] sm:text-[46px]" style={{ color: "#fff" }}>
-              เชียงใหม่ <span style={{ color: "var(--gold)" }}>Transit</span>
+        <div className="absolute inset-0 z-10 flex flex-col">
+          {/* top bar: wordmark + intro/lang */}
+          <div className="flex items-start justify-between px-5 pt-5 sm:px-10 sm:pt-7">
+            <div className="flex items-center gap-2.5">
+              <LannaEmblem size={34} />
+              <div className="wordmark text-[23px] leading-none drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)] sm:text-[30px]" style={{ color: "#fff" }}>
+                เชียงใหม่ <span style={{ color: "var(--gold)" }}>Transit</span>
+              </div>
             </div>
-            <div className="mt-1.5 text-[11px] text-white/75 drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]">
-              <span className="uppercase tracking-[0.24em]">Chiang Mai</span>
-              <span> · {t("metro & songthaew planner", "ผังเมืองรถไฟฟ้า")}</span>
+            <div className="flex items-center gap-2">
+              <button className="rpg-ghost" onClick={() => setShowCinematic(true)}>▶ {t("Intro", "ฉากเปิด")}</button>
+              <button className="rpg-ghost" onClick={toggleLang}>🌐 {lang === "en" ? "EN" : "ไทย"}</button>
             </div>
-            <button className="btn mt-2.5 px-2.5 py-1 text-[11px]" onClick={toggleLang} title="ภาษา / Language">
-              🌐 {lang === "en" ? "EN" : "ไทย"}
-            </button>
           </div>
 
-          {/* the goal wizard, in a frosted-glass card floating over the photo */}
-          <div className="panel-glass panel-accent cm-pop-in relative max-h-[72vh] w-full max-w-[560px] overflow-y-auto px-7 py-6">
-            <p className="text-[13px] leading-relaxed text-[var(--muted)]">
-              {t(
-                `${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} people move around the real city; longer trips they drive (jamming roads). Build transit that beats driving.`,
-                `ผู้คน ${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} คนเดินทางในเมืองจริง การเดินทางไกลพวกเขาขับรถ (ทำให้รถติด) สร้างขนส่งที่ดีกว่าการขับรถ`,
-              )}{" "}
-              <b className="text-[var(--text)]">{t("Choose your goal:", "เลือกเป้าหมายของคุณ:")}</b>
-            </p>
+          {/* featured hero — the chosen path, big over the photo */}
+          <div className="flex flex-1 items-center px-6 sm:px-12">
+            {featured ? (
+              <div key={featured} className="cm-fade-in max-w-[640px]">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[var(--gold-soft)] drop-shadow">{t("Your goal", "เป้าหมายของคุณ")}</div>
+                <h1 className="wordmark mt-1 text-[42px] leading-[1.04] drop-shadow-[0_3px_18px_rgba(0,0,0,0.95)] sm:text-[62px]" style={{ color: "#fff" }}>
+                  {t(GOALS[featured].label, goalTh[featured].label)}
+                </h1>
+                <div className="num-hero mt-2 text-[15px] text-[var(--gold-soft)] drop-shadow">{goalTargetText(featured)}</div>
+                <p className="mt-2 max-w-[520px] text-[14px] leading-relaxed text-white/85 drop-shadow">{t(GOALS[featured].desc, goalTh[featured].desc)}</p>
+              </div>
+            ) : (
+              <div className="cm-fade-in max-w-[600px]">
+                <h1 className="wordmark text-[34px] leading-tight drop-shadow-[0_3px_18px_rgba(0,0,0,0.95)] sm:text-[52px]" style={{ color: "#fff" }}>{t("Choose your path", "เลือกเส้นทางของคุณ")}</h1>
+                <p className="mt-2 max-w-[520px] text-[14px] leading-relaxed text-white/80 drop-shadow">
+                  {t(
+                    `${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} people move around the real Chiang Mai — most of them driving. Pick a goal, then begin your term as Governor.`,
+                    `ผู้คน ${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} คนเดินทางในเชียงใหม่จริง ส่วนใหญ่ขับรถ เลือกเป้าหมายแล้วเริ่มวาระผู้ว่าฯ ของคุณ`,
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
 
-            {/* 1 · choose a goal (select; build it with the Start button below) */}
-            <div className="mt-3 text-[11px] font-semibold text-[var(--muted)]">{t("1 · Goal", "1 · เป้าหมาย")}</div>
-            <div className="mt-1.5 grid grid-cols-2 gap-2">
-              {(Object.keys(GOALS) as GoalKind[]).map((g) => {
-                const m = GOALS[g];
+          {/* bottom control deck */}
+          <div className="px-4 pb-5 sm:px-8 sm:pb-7">
+            {/* 4 big goal photo tiles */}
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              {GOAL_ORDER.map((g) => {
                 const on = selGoal === g;
                 return (
                   <button
                     key={g}
-                    className="flex flex-col gap-1 rounded-xl border bg-[var(--fill)] px-3 py-2.5 text-left transition-colors hover:border-[var(--gold)] hover:bg-[var(--paper)] disabled:opacity-50"
-                    style={{ borderColor: on ? "var(--gold)" : "var(--border)", background: on ? "var(--paper)" : undefined, boxShadow: on ? "0 0 0 1px var(--gold)" : undefined }}
-                    onClick={() => setSelGoal(g)}
                     disabled={!loaded}
+                    onMouseEnter={() => setFocusGoal(g)}
+                    onMouseLeave={() => setFocusGoal(null)}
+                    onClick={() => { setSelGoal(g); setFocusGoal(g); }}
+                    className="group relative h-24 overflow-hidden rounded-xl text-left disabled:opacity-50 sm:h-28"
+                    style={{ outline: on ? "2px solid var(--gold)" : "1px solid rgba(231,200,120,0.3)", boxShadow: on ? "0 0 22px rgba(200,150,43,0.5)" : undefined }}
                   >
-                    <span className="text-[13px] font-semibold">
-                      {m.icon} {t(m.label, goalTh[g].label)}
-                    </span>
-                    <span className="font-mono text-[11px] font-medium text-[var(--gold-deep)]">{goalTargetText(g)}</span>
-                    <span className="text-[10.5px] leading-snug text-[var(--muted)]">{t(m.desc, goalTh[g].desc)}</span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={GOAL_PHOTO[g]} alt="" draggable={false} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,6,2,0.05), rgba(10,6,2,0.88))" }} />
+                    <div className="absolute inset-x-0 bottom-0 p-2">
+                      <div className="text-[13px] font-semibold leading-tight text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]">{t(GOALS[g].label, goalTh[g].label)}</div>
+                    </div>
+                    {on && <div className="absolute right-1.5 top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: "var(--gold)", color: "var(--accent-ink)" }}><Icon name="check" size={11} /></div>}
                   </button>
                 );
               })}
             </div>
 
-            {/* 2 · start from a blank city OR Chiang Mai's real songthaew network */}
-            <div className="mt-3 text-[11px] font-semibold text-[var(--muted)]">{t("2 · Start from", "2 · เริ่มจาก")}</div>
-            <div className="mt-1.5 grid grid-cols-2 gap-2">
-              {([
-                { id: "scratch", icon: "🆕", en: "Build from scratch", th: "สร้างใหม่ทั้งหมด", dEn: "An empty city — design the whole network yourself.", dTh: "เมืองเปล่า — ออกแบบเครือข่ายเองทั้งหมด" },
-                { id: "existing", icon: "🛻", en: "Existing songthaew net", th: "ระบบสองแถวที่มีอยู่", dEn: "Inherit Chiang Mai's real red-truck network — already overwhelmed (~Grade C). Modernise it with metro to reach an A.", dTh: "รับช่วงเครือข่ายรถแดงจริงของเชียงใหม่ — แออัดอยู่แล้ว (~เกรด C) ยกระดับด้วยรถไฟฟ้าเพื่อไปให้ถึง A" },
-              ] as const).map((s) => {
-                const on = buildSource === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    className="flex flex-col gap-0.5 rounded-xl border bg-[var(--fill)] px-3 py-2.5 text-left transition-colors hover:border-[var(--gold)] hover:bg-[var(--paper)]"
-                    style={{ borderColor: on ? "var(--gold)" : "var(--border)", background: on ? "var(--paper)" : undefined, boxShadow: on ? "0 0 0 1px var(--gold)" : undefined }}
-                    onClick={() => setBuildSource(s.id)}
-                  >
-                    <span className="text-[12.5px] font-semibold">{s.icon} {t(s.en, s.th)}</span>
-                    <span className="text-[10px] leading-snug text-[var(--muted)]">{t(s.dEn, s.dTh)}</span>
-                  </button>
-                );
-              })}
+            {/* start-from · difficulty · begin */}
+            <div className="mt-3 flex flex-col gap-3 rounded-xl border border-white/15 bg-black/45 p-3 backdrop-blur sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/55">{t("Start from", "เริ่มจาก")}</div>
+                <div className="flex gap-1.5">
+                  {([["scratch", t("From scratch", "สร้างใหม่"), "🆕"], ["existing", t("Existing songthaew", "สองแถวที่มีอยู่"), "🛻"]] as const).map(([id, label]) => (
+                    <button key={id} className="rpg-chip flex-1" data-on={buildSource === id} onClick={() => setBuildSource(id as "scratch" | "existing")}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex-1">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/55">{t("Difficulty", "ความยาก")}</div>
+                <div className="flex gap-1.5">
+                  {(Object.keys(DIFFICULTIES) as Difficulty[]).map((dk) => {
+                    const dd = DIFFICULTIES[dk];
+                    return (
+                      <button
+                        key={dk}
+                        className="rpg-chip flex-1"
+                        data-on={difficulty === dk}
+                        onClick={() => { setDifficulty(dk); try { localStorage.setItem("cm-difficulty", dk); } catch {} }}
+                        title={`${dd.label}: budget ×${dd.budgetMult}, cost ×${dd.costMult}, grade ×${dd.gradeMult}${dd.bankruptcy ? ", bankruptcy ON" : ""}${dd.deadlineDays ? `, ${dd.deadlineDays}-day deadline` : ""}`}
+                      >
+                        {dd.icon} {t(dd.label, diffTh[dk])}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <button
+                className="rpg-start"
+                disabled={!loaded || !selGoal}
+                onClick={() => { if (selGoal) startNow(selGoal); }}
+              >
+                {loaded ? (selGoal ? t("▶ Begin your term", "▶ เริ่มวาระ") : t("Pick a goal", "เลือกเป้าหมาย")) : t("Loading…", "กำลังโหลด…")}
+              </button>
             </div>
-
-            {/* 3 · difficulty (Free Build ignores it; run seed is now hidden + auto) */}
-            <div className="mt-3 text-[11px] font-semibold text-[var(--muted)]">{t("3 · Difficulty", "3 · ระดับความยาก")}</div>
-            <div className="mt-1.5 flex gap-1.5">
-              {(Object.keys(DIFFICULTIES) as Difficulty[]).map((dk) => {
-                const dd = DIFFICULTIES[dk];
-                const on = difficulty === dk;
-                return (
-                  <button
-                    key={dk}
-                    className="btn flex-1 justify-center text-[12px]"
-                    onClick={() => {
-                      setDifficulty(dk);
-                      try { localStorage.setItem("cm-difficulty", dk); } catch {}
-                    }}
-                    style={on ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
-                    title={`${dd.label}: budget ×${dd.budgetMult}, cost ×${dd.costMult}, opex ×${dd.opexMult}, fare ×${dd.fareMult}${dd.bankruptcy ? ", bankruptcy ON" : ""}${dd.deadlineDays ? `, ${dd.deadlineDays}-day deadline` : ""}`}
-                  >
-                    {dd.icon} {t(dd.label, { easy: "ง่าย", medium: "ปานกลาง", challenge: "ท้าทาย", hard: "ยาก" }[dk])}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* start — the dice/seed runs automatically behind the scenes */}
-            <button
-              className="btn btn-accent mt-4 w-full justify-center py-2.5 text-[14px] font-semibold disabled:opacity-50"
-              disabled={!loaded || !selGoal}
-              onClick={() => {
-                if (!selGoal) return;
-                seedExistingRef.current = buildSource === "existing";
-                setShowIntro(true);
-                sim.startGame(selGoal, difficulty, seed);
-              }}
-            >
-              {loaded ? (selGoal ? t("▶ Start building", "▶ เริ่มสร้างเมือง") : t("Pick a goal first", "เลือกเป้าหมายก่อน")) : t("Loading…", "กำลังโหลด…")}
-            </button>
 
             {saved && (saved.lines?.length || saved.stations?.length) ? (
               <button
-                className="mt-2 w-full rounded-xl border border-[var(--gold)] bg-[var(--fill)] px-3 py-2 text-left text-[12px] transition-colors hover:bg-[var(--paper)] disabled:opacity-50"
+                className="rpg-ghost mt-2.5 w-full !rounded-xl py-2 text-left"
+                disabled={!loaded}
                 onClick={() => {
                   seedExistingRef.current = false;
                   restoreRef.current = { stations: saved.stations || [], lines: saved.lines || [] };
@@ -561,32 +604,16 @@ export default function Page() {
                   setDifficulty(dm);
                   sim.startGame(saved.goal, dm, seed);
                 }}
-                disabled={!loaded}
               >
-                ↻ <b>{t("Resume last build", "เล่นต่อจากที่บันทึก")}</b>{" "}
-                <span className="text-[var(--muted)]">
-                  — {saved.lines?.length ?? 0} {t("lines", "สาย")}, {saved.stations?.length ?? 0}{" "}
-                  {t("stations", "สถานี")} · {t(GOALS[saved.goal]?.label ?? "goal", goalTh[saved.goal]?.label ?? "")}
-                </span>
+                ↻ <b style={{ color: "var(--gold-soft)" }}>{t("Resume last build", "เล่นต่อจากที่บันทึก")}</b>
+                <span className="text-white/65"> — {saved.lines?.length ?? 0} {t("lines", "สาย")} · {t(GOALS[saved.goal]?.label ?? "goal", goalTh[saved.goal]?.label ?? "")}</span>
               </button>
             ) : null}
-            <div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-[var(--muted)]">
-              <span>
-                {loaded
-                  ? t("Goal → start-from → difficulty → Start.", "เป้าหมาย → เริ่มจาก → ความยาก → เริ่ม")
-                  : t("Loading Chiang Mai street network…", "กำลังโหลดแผนที่เชียงใหม่…")}
-              </span>
-              <button className="text-[var(--gold-deep)] hover:underline" onClick={() => setShowCinematic(true)}>
-                {t("▶ Watch intro", "▶ ดูฉากเปิด")}
-              </button>
-            </div>
           </div>
         </div>
+
         {showCinematic && (
-          <OpeningCinematic
-            lang={lang}
-            onDone={() => setShowCinematic(false)}
-          />
+          <OpeningCinematic lang={lang} onDone={() => setShowCinematic(false)} />
         )}
       </main>
     );
@@ -629,7 +656,10 @@ export default function Page() {
   const rkTot = rk.resident + rk.student + rk.tourist;
   const rkPct = (n: number) => (rkTot ? Math.round((n / rkTot) * 100) : 0);
   const baseScore = 100 * (0.68 * odScoreFrac + 0.18 * coverageScore + 0.14 * trafficReliefFrac);
-  const cityScore = meta ? Math.round(baseScore * (0.82 + 0.18 * satFrac)) : 0;
+  // difficulty now visibly shapes the grade climb — Easy reaches a grade with a
+  // smaller network, Hard demands a denser one (playtest: difficulty felt "cosmetic")
+  const gradeMult = DIFFICULTIES[difficulty].gradeMult;
+  const cityScore = meta ? Math.min(100, Math.round(baseScore * (0.82 + 0.18 * satFrac) * gradeMult)) : 0;
   // direction of the latest score change → flash the number jade (up) / red (down).
   // compared during render against the previous render's value (cheap, no effect).
   const scoreDir = cityScore > prevScoreRef.current ? 1 : cityScore < prevScoreRef.current ? -1 : 0;
@@ -720,6 +750,7 @@ export default function Page() {
         onChainStation={chainStation}
         onAddRoutePoint={addRoutePoint}
         onDemolishStation={demolishStation}
+        onStationInfo={(s) => setInfoStation(s)}
         onDemolishLine={(id) => {
           pushUndo();
           sim.removeLine(id);
@@ -755,7 +786,7 @@ export default function Page() {
 
       {/* Title + clock + economy */}
       <div className="absolute left-2 top-2 z-20 max-h-[44vh] w-[45vw] overflow-y-auto sm:left-4 sm:top-4 sm:max-h-none sm:w-[250px] sm:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="panel panel-accent px-4 py-3">
+        <div className="panel panel-frame panel-accent px-4 py-3">
           <div className="flex items-center justify-between gap-2">
             <div className="wordmark flex items-center gap-1.5 text-[15px] leading-[1.35]">
               <LannaEmblem size={16} /> เชียงใหม่ Transit
@@ -775,7 +806,7 @@ export default function Page() {
           </div>
           <div className="mt-1 flex items-end justify-between">
             <div>
-              <div className="font-mono text-base tabular-nums leading-none text-[var(--muted)]">{meta ? clock(meta.simTime) : "--:--"}</div>
+              <div className="num-hero text-lg leading-none text-[var(--muted)]">{meta ? clock(meta.simTime) : "--:--"}</div>
               {meta && <div className="mt-0.5 text-[10.5px] text-[var(--muted)]">{peakBadge}</div>}
               {meta?.activeEvent && (() => {
                 const ev = EVENTS.find((e) => e.id === meta.activeEvent!.id);
@@ -787,7 +818,7 @@ export default function Page() {
               })()}
             </div>
             <div className="text-right">
-              <div className="font-mono text-base tabular-nums" style={{ color: meta && meta.budget < 0 ? "var(--danger)" : "var(--accent)" }}>
+              <div className="num-hero text-lg" style={{ color: meta && meta.budget < 0 ? "var(--danger)" : "var(--accent)" }}>
                 {meta ? money(meta.budget) : "…"}
               </div>
               {meta && meta.budget < 0 && (
@@ -806,12 +837,7 @@ export default function Page() {
                 className="flex items-center gap-2.5"
                 title={`City Score = (68% demand served + 18% coverage + 14% traffic relief) × satisfaction\nDemand served ${Math.round(odServed * 100)}% of travel corridors (need ~42% for full credit) → ${Math.round(odScoreFrac * 100)}/100\nCoverage ${Math.round(coverageFrac * 100)}% → ${Math.round(coverageScore * 100)}/100\nTraffic relief ${Math.round(trafficReliefFrac * 100)}/100 (traffic ${congestion}%)\nRider satisfaction ${meta?.satisfaction ?? 100}% (crowding + waits cap your grade)`}
               >
-                <div
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-3xl font-bold shadow-sm"
-                  style={{ background: grade.c, color: "var(--accent-ink)" }}
-                >
-                  {grade.g}
-                </div>
+                <GradeSeal grade={grade.g} color={grade.c} />
                 <div className="flex-1">
                   <div className="flex items-center justify-between text-[12px]">
                     <span className="text-[var(--muted)]">
@@ -820,7 +846,7 @@ export default function Page() {
                         <span className="ml-1 text-[var(--accent)]">· {t("goal", "เป้า")} ≥{gradeGoalTarget}</span>
                       )}
                     </span>
-                    <span className="font-mono text-lg font-semibold tabular-nums leading-none text-[var(--text)]">
+                    <span className="num-hero text-xl leading-none text-[var(--text)]">
                       <span key={cityScore} className={scoreDir > 0 ? "cm-flash-up" : scoreDir < 0 ? "cm-flash-down" : "cm-tick"}>{cityScore}</span>
                       <span className="text-[11px] text-[var(--muted)]">/100</span>
                     </span>
@@ -857,7 +883,7 @@ export default function Page() {
               )}
               <div className="mt-2 flex items-center justify-between text-[12px]">
                 <span style={{ color: "var(--ride)" }} title="boardings over the last 24 sim-hours (rolling), at city scale">
-                  🚆 {ppl(meta.dailyRiders)} {t("riders/day", "คน/วัน")} <span className="text-[var(--muted)]">(24h)</span>
+                  <Icon name="metro" size={13} /> <span className="num">{ppl(meta.dailyRiders)}</span> {t("riders/day", "คน/วัน")} <span className="text-[var(--muted)]">(24h)</span>
                 </span>
                 <span
                   style={{ color: congestion >= 55 ? "var(--danger)" : "var(--warn)" }}
@@ -884,7 +910,7 @@ export default function Page() {
                 <>
                   <div className="mt-1 flex items-center justify-between text-[12px]">
                     <span style={{ color: crowdedLines > 0 ? "var(--danger)" : "var(--muted)" }}>
-                      🧍 {ppl(waiting)} {t("waiting", "รอ")}{crowdedLines > 0 ? ` · ${crowdedLines} ${t("crowded", "แน่น")}` : ""}
+                      <Icon name="wait" size={13} /> <span className="num">{ppl(waiting)}</span> {t("waiting", "รอ")}{crowdedLines > 0 ? ` · ${crowdedLines} ${t("crowded", "แน่น")}` : ""}
                     </span>
                     {crowdedLines > 0 && (
                       <span className="text-[11px] text-[var(--accent)]">＋ {t("add trains / a line", "เพิ่มรถ / สายใหม่")}</span>
@@ -896,8 +922,8 @@ export default function Page() {
                     title={t("Riders complain when trains are packed or waits are long — it caps your grade.", "ผู้โดยสารบ่นเมื่อรถแน่นหรือรอนาน — มีผลต่อเกรด")}
                   >
                     <span style={{ color: (meta.satisfaction ?? 100) >= 70 ? "var(--ride)" : (meta.satisfaction ?? 100) >= 45 ? "var(--warn)" : "var(--danger)" }}>
-                      {(meta.satisfaction ?? 100) >= 70 ? "😀" : (meta.satisfaction ?? 100) >= 45 ? "😐" : "😣"}{" "}
-                      {meta.satisfaction ?? 100}% {t("happy", "พอใจ")}
+                      <Icon name={(meta.satisfaction ?? 100) >= 55 ? "happy" : "unhappy"} size={14} />{" "}
+                      <span className="num">{meta.satisfaction ?? 100}%</span> {t("happy", "พอใจ")}
                     </span>
                     <span className="text-[var(--muted)]">
                       ⏱ {Math.round((meta.avgWaitSec ?? 0) / 60)} {t("min wait", "นาทีรอ")}
@@ -917,7 +943,7 @@ export default function Page() {
             <div className="mt-2.5 rounded-lg border border-[var(--line)] bg-[var(--fill)] px-2.5 py-2">
               <div className="flex items-center justify-between text-[12px]">
                 <span className="font-semibold">
-                  🎯 {goalDef.icon} {goal ? t(goalDef.label, goalTh[goal].label) : goalDef.label}
+                  <Icon name="demand" size={13} /> {goalDef.icon} {goal ? t(goalDef.label, goalTh[goal].label) : goalDef.label}
                 </span>
                 <span className="font-mono text-[var(--accent)]">{Math.round(goalPct)}%</span>
               </div>
@@ -981,7 +1007,7 @@ export default function Page() {
                       }}
                     >
                       <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: rgb(l.color) }} />
-                      <span className="w-5 shrink-0 text-center text-[13px] leading-none" title={MODE_PARAMS[l.mode].label}>{l.mode === "metro" ? "🚆" : "🛻"}</span>
+                      <span className="w-5 shrink-0 text-center" title={MODE_PARAMS[l.mode].label} style={{ color: rgb(l.color) }}><Icon name={modeIcon(l.mode)} size={15} /></span>
                       <span className="flex-1 truncate text-[var(--muted)]">
                         {(l.totalLen / 1000).toFixed(1)} km
                       </span>
@@ -1002,9 +1028,9 @@ export default function Page() {
                         {crowdOf(util)}
                       </span>
                       <span style={{ color: (pl?.waiting ?? 0) > 50 ? "var(--danger)" : "var(--muted)" }}>
-                        🧍 {ppl(pl?.waiting ?? 0)} {t("wait", "รอ")}
+                        <Icon name="wait" size={11} /> <span className="num">{ppl(pl?.waiting ?? 0)}</span> {t("wait", "รอ")}
                       </span>
-                      <span className="text-[var(--muted)]">{l.mode === "metro" ? "🚆" : "🛻"}{l.fleet}</span>
+                      <span className="inline-flex items-center gap-0.5 text-[var(--muted)]"><Icon name={modeIcon(l.mode)} size={12} />{l.fleet}</span>
                       {sel && <span className="ml-auto font-medium text-[var(--accent)]">{t("editing ↓", "แก้ไขด้านล่าง ↓")}</span>}
                     </div>
                   </div>
@@ -1018,7 +1044,7 @@ export default function Page() {
       {/* Stats */}
       {(
       <div className="absolute right-2 top-2 z-20 max-h-[44vh] w-[45vw] overflow-y-auto sm:right-4 sm:top-4 sm:max-h-none sm:w-[224px] sm:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="panel px-4 py-3 text-[13px]">
+        <div className="panel panel-frame px-4 py-3 text-[13px]">
           <Stat label={t("Travellers", "ผู้คน")} value={meta ? ppl(meta.agentCount) : "…"} />
           <Stat label={t("Walking", "เดิน")} dot="var(--walk)" value={meta ? ppl(meta.walking) : "0"} />
           <Stat label={t("Driving", "ขับรถ")} dot="var(--warn)" value={meta ? ppl(meta.driving) : "0"} />
@@ -1033,7 +1059,7 @@ export default function Page() {
           {/* train crowding legend (1 empty → 5 full) */}
           <div className="my-1.5 h-px bg-[var(--fill-2)]" />
           <div className="flex items-center justify-between">
-            <span className="text-[10.5px] text-[var(--muted)]">🚆 {t("Train crowding", "ความแน่นรถไฟ")}</span>
+            <span className="inline-flex items-center gap-1 text-[10.5px] text-[var(--muted)]"><Icon name="metro" size={13} /> {t("Train crowding", "ความแน่นรถไฟ")}</span>
             <span className="flex items-center gap-[3px]">
               {["#2f8f6b", "#7fa53c", "#d9a441", "#c26a2a", "#b5462e"].map((c, i) => (
                 <span key={c} title={`${i + 1}/5`} className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] text-[8px] font-bold text-white" style={{ background: c }}>
@@ -1084,7 +1110,7 @@ export default function Page() {
           return (
             <div className="panel panel-accent mt-2 px-3 py-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[11.5px] font-semibold">🎯 {t("Travel demand", "ความต้องการเดินทาง")}</span>
+                <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold"><Icon name="demand" size={14} /> {t("Travel demand", "ความต้องการเดินทาง")}</span>
                 <span className="flex items-center gap-1.5">
                   {!coldStart && (
                     <span className="font-mono text-[11px]" style={{ color: odServedPct >= 50 ? "var(--ride)" : "var(--warn)" }}>
@@ -1187,7 +1213,7 @@ export default function Page() {
         {openMenu === "speed" && (
           <div className="panel flex items-center gap-3 px-4 py-2.5">
             <button className="btn" onClick={() => (playing ? sim.pause() : sim.play())} disabled={!ready} title={playing ? t("Pause", "หยุด") : t("Play", "เล่น")}>
-              {playing ? "⏸" : "▶"}
+              <Icon name={playing ? "pause" : "play"} size={14} />
             </button>
             <input
               type="range" min={1} max={1000} step={1} value={Math.min(1000, Math.max(1, speed))}
@@ -1211,7 +1237,7 @@ export default function Page() {
         {/* 🚆 metro tools (place stations → connect → demolish) */}
         {openMenu === "metro" && (
           <div className="panel flex flex-wrap items-center justify-center gap-1.5 px-3 py-2">
-            <span className="mr-0.5 text-[11px] font-semibold" style={{ color: rgb(MODE_PARAMS.metro.color) }}>🚆 {t("Metro", "รถไฟฟ้า")}</span>
+            <span className="mr-0.5 inline-flex items-center gap-1 text-[11px] font-semibold" style={{ color: rgb(MODE_PARAMS.metro.color) }}><Icon name="metro" size={15} /> {t("Metro", "รถไฟฟ้า")}</span>
             {[TOOLS[1], TOOLS[2], TOOLS[3]].map((tl) => {
               const on = tool === tl.id;
               const locked = (tl.id === "track" && stations.length < 2) || (tl.id === "demolish" && stations.length === 0 && lines.length === 0);
@@ -1219,7 +1245,7 @@ export default function Page() {
                 <button key={tl.id} className="btn flex items-center gap-1" onClick={() => pickTool(tl.id)} disabled={!ready || locked}
                   style={on ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
                   title={locked ? t("Place 2+ stations first (🚉)", "วางสถานีอย่างน้อย 2 จุดก่อน (🚉)") : `${t(tl.en, tl.th)} — ${tl.hint}`}>
-                  <span>{tl.icon}</span><span className="text-[11px]">{t(tl.en, tl.th)}</span>
+                  <Icon name={TOOL_ICON[tl.id]} size={14} /><span className="text-[11px]">{t(tl.en, tl.th)}</span>
                 </button>
               );
             })}
@@ -1230,7 +1256,7 @@ export default function Page() {
         {/* 🛻 songthaew tools — place+connect stations OR draw a free route */}
         {openMenu === "songthaew" && (
           <div className="panel flex flex-wrap items-center justify-center gap-1.5 px-3 py-2">
-            <span className="mr-0.5 text-[11px] font-semibold" style={{ color: rgb(MODE_PARAMS.songthaew.color) }}>🛻 {t("Songthaew", "สองแถว")}</span>
+            <span className="mr-0.5 inline-flex items-center gap-1 text-[11px] font-semibold" style={{ color: rgb(MODE_PARAMS.songthaew.color) }}><Icon name="songthaew" size={15} /> {t("Songthaew", "สองแถว")}</span>
             {[TOOLS[1], TOOLS[2], ROUTE_TOOL, TOOLS[3]].map((tl) => {
               const on = tool === tl.id;
               const locked = (tl.id === "track" && stations.length < 2) || (tl.id === "demolish" && stations.length === 0 && lines.length === 0);
@@ -1238,7 +1264,7 @@ export default function Page() {
                 <button key={tl.id} className="btn flex items-center gap-1" onClick={() => pickTool(tl.id)} disabled={!ready || locked}
                   style={on ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
                   title={locked ? t("Place 2+ stations first (🚉)", "วางสถานีอย่างน้อย 2 จุดก่อน (🚉)") : `${t(tl.en, tl.th)} — ${tl.hint}`}>
-                  <span>{tl.icon}</span><span className="text-[11px]">{t(tl.en, tl.th)}</span>
+                  <Icon name={TOOL_ICON[tl.id]} size={14} /><span className="text-[11px]">{t(tl.en, tl.th)}</span>
                 </button>
               );
             })}
@@ -1284,7 +1310,7 @@ export default function Page() {
               style={{ background: rgb(MODE_PARAMS[buildMode].color), color: buildMode === "metro" ? "var(--accent-ink)" : "#fff", borderColor: "transparent", cursor: "default" }}
               title={`${MODE_PARAMS[buildMode].label}: ${Math.round(MODE_PARAMS[buildMode].speed * 3.6)} km/h, cap ${MODE_PARAMS[buildMode].capacity}, fare ฿${MODE_PARAMS[buildMode].fare}`}
             >
-              {buildMode === "metro" ? "🚆 Metro" : "🛻 Songthaew"}
+              <span className="inline-flex items-center gap-1"><Icon name={modeIcon(buildMode)} size={14} /> {buildMode === "metro" ? "Metro" : "Songthaew"}</span>
             </span>
             <span className="flex items-center gap-1">
               {LINE_COLORS.map((c, i) => (
@@ -1329,7 +1355,7 @@ export default function Page() {
               style={{ background: rgb(MODE_PARAMS.songthaew.color), color: "#fff", borderColor: "transparent", cursor: "default" }}
               title={`Songthaew: from ฿${(ECONOMY.songthaew.build / 1e3).toFixed(0)}k, ${Math.round(MODE_PARAMS.songthaew.speed * 3.6)} km/h, cap ${MODE_PARAMS.songthaew.capacity}, fare ฿${MODE_PARAMS.songthaew.fare} · road-bound feeder`}
             >
-              🛻 Songthaew
+              <span className="inline-flex items-center gap-1"><Icon name="songthaew" size={14} /> Songthaew</span>
             </span>
             <span className="flex items-center gap-1">
               {LINE_COLORS.map((c, i) => (
@@ -1377,7 +1403,7 @@ export default function Page() {
               disabled={selLine.fleet >= MAX_FLEET}
               title={t("Add a vehicle to this line", "เพิ่มคันรถในสายนี้")}
             >
-              <span className="text-[16px] leading-none">{selLine.mode === "metro" ? "🚆" : "🛻"}</span>
+              <Icon name={modeIcon(selLine.mode)} size={17} />
               ＋ {t(selLine.mode === "metro" ? "Add train" : "Add songthaew", selLine.mode === "metro" ? "เพิ่มขบวน" : "เพิ่มสองแถว")}
             </button>
             <span className="font-mono text-[12px] text-[var(--muted)]" title={t(`${selLine.fleet}/${MAX_FLEET} vehicles`, `${selLine.fleet}/${MAX_FLEET} คัน`)}>
@@ -1408,14 +1434,14 @@ export default function Page() {
               onClick={() => { pushUndo(); sim.removeLine(selLine.id); setSelectedLineId(null); }}
               title={t("Remove this line", "รื้อถอนสายนี้")}
             >
-              🗑️ {t("Remove", "รื้อถอน")}
+<Icon name="demolish" size={14} /> {t("Remove", "รื้อถอน")}
             </button>
             <button className="btn" onClick={() => setSelectedLineId(null)} title={t("Close", "ปิด")}>✕</button>
           </div>
         )}
 
         {/* ── the 4 primary buttons ───────────────────────────────────────── */}
-        <div className="panel flex flex-nowrap items-center gap-2 overflow-x-auto px-3 py-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="panel panel-frame flex flex-nowrap items-center gap-2 overflow-x-auto px-3 py-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             className="btn flex items-center gap-1.5"
             onClick={() => setOpenMenu((m) => (m === "speed" ? null : "speed"))}
@@ -1423,8 +1449,8 @@ export default function Page() {
             style={openMenu === "speed" ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
             title={t("Speed — set how fast time runs (1×–1000×)", "ความเร็ว — ปรับความเร็วเวลา (1×–1000×)")}
           >
-            ⏩ <span className="text-[12px]">{t("Speed", "ความเร็ว")}</span>
-            <span className="font-mono text-[11px] opacity-80">{speed}×</span>
+            <Icon name="speed" size={15} /> <span className="text-[12px]">{t("Speed", "ความเร็ว")}</span>
+            <span className="num text-[11px] opacity-80">{speed}×</span>
           </button>
           <button
             className="btn flex items-center gap-1.5"
@@ -1433,7 +1459,7 @@ export default function Page() {
             style={openMenu === "metro" ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
             title={t("Metro — fast, traffic-immune trunk lines", "รถไฟฟ้า — สายหลักเร็ว ไม่ติดรถ")}
           >
-            🚆 <span className="text-[12px]">{t("Metro", "รถไฟฟ้า")}</span>
+            <Icon name="metro" size={16} /> <span className="text-[12px]">{t("Metro", "รถไฟฟ้า")}</span>
           </button>
           <button
             className="btn flex items-center gap-1.5"
@@ -1442,7 +1468,7 @@ export default function Page() {
             style={openMenu === "songthaew" ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
             title={t("Songthaew — cheap road-bound feeders", "สองแถว — สายรองราคาถูก วิ่งบนถนน")}
           >
-            🛻 <span className="text-[12px]">{t("Songthaew", "สองแถว")}</span>
+            <Icon name="songthaew" size={16} /> <span className="text-[12px]">{t("Songthaew", "สองแถว")}</span>
           </button>
           <button
             className="btn flex items-center gap-1.5"
@@ -1451,7 +1477,7 @@ export default function Page() {
             style={tool === "pan" && !openMenu ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
             title={t("Move the map around", "เลื่อนแผนที่ไปมา")}
           >
-            🖐️ <span className="text-[12px]">{t("Pan", "เลื่อนแผนที่")}</span>
+            <Icon name="pan" size={16} /> <span className="text-[12px]">{t("Pan", "เลื่อนแผนที่")}</span>
           </button>
         </div>
       </div>
@@ -1469,6 +1495,50 @@ export default function Page() {
           {sim.notice}
         </div>
       )}
+
+      {/* ✓ build-success confirmation toast — tells you the line actually launched */}
+      {buildFlash && (
+        <div
+          className="panel cm-pop-in absolute left-1/2 top-32 z-30 -translate-x-1/2 px-4 py-2 text-[12.5px] font-semibold"
+          style={{ borderColor: "var(--ride)", color: "var(--ride)" }}
+        >
+          {buildFlash}
+        </div>
+      )}
+
+      {/* 🚉 station inspector — click a station (in Pan) to see its traffic */}
+      {infoStation && (() => {
+        const st = meta?.stopStats?.[infoStation.node];
+        const serving = lines.filter((l) => l.stops.some((s) => s.node === infoStation.node));
+        return (
+          <div className="panel panel-frame panel-accent cm-pop-in absolute left-1/2 top-24 z-30 w-[260px] max-w-[88vw] -translate-x-1/2 px-4 py-3 text-[13px]">
+            <div className="flex items-start justify-between gap-2">
+              <div className="inline-flex items-center gap-1.5 font-semibold leading-tight">
+                <span style={{ color: "var(--gold-deep)" }}><Icon name="station" size={16} /></span>
+                <span className="line-clamp-2">{infoStation.name || t("Station", "สถานี")}</span>
+              </div>
+              <button className="shrink-0 text-[12px] text-[var(--muted)] hover:text-[var(--text)]" onClick={() => setInfoStation(null)}>✕</button>
+            </div>
+            {/* which lines call here */}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {serving.length ? serving.map((l) => (
+                <span key={l.id} className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10.5px]" style={{ background: "var(--fill-2)", color: rgb(l.color) }}>
+                  <Icon name={modeIcon(l.mode)} size={12} /> {MODE_PARAMS[l.mode].label}
+                </span>
+              )) : <span className="text-[11px] text-[var(--muted)]">{t("Not connected yet — connect it with a line", "ยังไม่ได้เชื่อม — ต่อสายเข้าสถานีนี้")}</span>}
+              {serving.length > 1 && <span className="text-[10px] font-medium text-[var(--gold-deep)]">{t("· interchange", "· จุดเปลี่ยนสาย")}</span>}
+            </div>
+            <div className="gold-rule my-2.5" />
+            <div className="flex flex-col gap-0.5">
+              <Stat label={t("Boarded here (total)", "ขึ้นรถที่นี่ (รวม)")} dot="var(--ride)" value={st ? ppl(st.board) : "0"} />
+              <Stat label={t("Alighted here (total)", "ลงรถที่นี่ (รวม)")} dot="var(--jade)" value={st ? ppl(st.alight) : "0"} />
+              <Stat label={t("Waiting now", "กำลังรอตอนนี้")} dot="#ffffff" value={st ? ppl(st.wait) : "0"} valueColor={st && st.wait > 50 ? "var(--danger)" : undefined} />
+              <Stat label={t("Passed through", "ผ่านเลย (ไม่ลง)")} dot="var(--muted)" value={st ? ppl(st.pass) : "0"} />
+            </div>
+            <div className="mt-2 text-[10px] text-[var(--muted)]">{t("Tip: more boardings = a well-placed station.", "เคล็ดลับ: ขึ้นรถเยอะ = วางสถานีได้ดี")}</div>
+          </div>
+        );
+      })()}
 
       {/* Bankruptcy banner */}
       {meta?.bankrupt && (
@@ -1532,7 +1602,7 @@ export default function Page() {
       {showWin && goalDef && (
         <div className="cm-fade-in absolute inset-0 z-40 flex items-center justify-center bg-[rgba(42,28,14,0.5)]">
           <div className="panel cm-pop-in px-8 py-6 text-center" style={{ borderColor: "var(--ride)" }}>
-            <div className="text-4xl">🏆</div>
+            <div style={{ color: "var(--gold)" }}><Icon name="trophy" size={46} /></div>
             <div className="mt-2 text-lg font-semibold" style={{ color: "var(--ride)" }}>
               {goal ? t(goalDef.winTitle, goalTh[goal].win) : goalDef.winTitle}
             </div>
@@ -1593,6 +1663,21 @@ function LannaEmblem({ size = 30 }: { size?: number }) {
       <path d="M16 8.5 q4.4 7.5 0 15 q-4.4 -7.5 0 -15z" fill="var(--gold)" opacity="0.9" />
       <circle cx="16" cy="16" r="2.1" fill="var(--paper)" />
     </svg>
+  );
+}
+
+// City Score as a gold "seal" medallion (the headline metric deserves ceremony,
+// not a flat dashboard chip). Grade letter set in the Trirong display face.
+function GradeSeal({ grade, color }: { grade: string; color: string }) {
+  return (
+    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
+      <svg width="56" height="56" viewBox="0 0 56 56" className="absolute inset-0" aria-hidden>
+        <circle cx="28" cy="28" r="26" fill="var(--paper)" stroke="var(--gold)" strokeWidth="2" />
+        <circle cx="28" cy="28" r="22.5" fill="none" stroke="var(--gold-soft)" strokeWidth="1" />
+        <path d="M28 6.5 L49.5 28 L28 49.5 L6.5 28 Z" fill="none" stroke="var(--gold-deep)" strokeWidth="0.8" opacity="0.45" />
+      </svg>
+      <span className="wordmark relative text-[27px] leading-none" style={{ color }}>{grade}</span>
+    </div>
   );
 }
 

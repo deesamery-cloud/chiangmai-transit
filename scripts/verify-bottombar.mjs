@@ -10,10 +10,10 @@ const txt = () => page.evaluate(()=>document.body.innerText.replace(/\s+/g," "))
 
 await page.goto(URL,{waitUntil:"load",timeout:60000}); await page.waitForTimeout(1000);
 await page.getByText(/Grade A City|เมืองเกรด A/).first().click();
-await page.getByRole("button",{name:/Start building|เริ่มสร้างเมือง/}).first().click();
+await page.getByRole("button",{name:/Begin your term|เริ่มวาระ/}).first().click();
 await page.waitForTimeout(700);
 // dismiss the appointment cutscene
-const skip = page.getByRole("button",{name:/Skip ✕|ข้าม ✕/}); if(await skip.count()) await skip.first().click();
+const skip = page.getByRole("button",{name:/Skip intro ⏭|ข้ามฉาก ⏭/}); if(await skip.count()) await skip.first().click();
 await page.waitForSelector("canvas",{timeout:30000}); await page.waitForTimeout(900);
 
 const t0 = await txt();

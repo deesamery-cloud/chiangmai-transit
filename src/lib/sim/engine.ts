@@ -163,6 +163,11 @@ export class SimEngine {
   private boardings = 0;
   private waitSum = 0;
   private waitCount = 0;
+  // per-STATION (graph node) cumulative traffic: boarded (get in) / alighted
+  // (get off) / passed-through, so the player can click a station and see it
+  private stopBoard = new Map<number, number>();
+  private stopAlight = new Map<number, number>();
+  private stopPass = new Map<number, number>();
 
   // economy + objectives
   private budget: number;
@@ -961,14 +966,20 @@ export class SimEngine {
     }
   }
 
+  private bump(m: Map<number, number>, node: number, n = 1): void {
+    m.set(node, (m.get(node) || 0) + n);
+  }
+
   private serviceStop(veh: Vehicle, stopIdx: number): void {
     const rt = veh.rt;
+    const stopNode = rt.line.stops[stopIdx].node;
     if (veh.aboard.length) {
       const keep: number[] = [];
       for (const id of veh.aboard) {
         const a = this.agents[id];
         if (a.alightStopIdx === stopIdx && a.rt === rt) {
           veh.load--;
+          this.bump(this.stopAlight, stopNode);
           a.veh = null;
           a.curNode = rt.line.stops[stopIdx].node;
           a.lon = rt.line.stops[stopIdx].lon;
@@ -999,6 +1010,7 @@ export class SimEngine {
         }
       }
       veh.aboard = keep;
+      if (keep.length) this.bump(this.stopPass, stopNode, keep.length); // rode through, didn't get off
     }
     const q = rt.waitQ[stopIdx];
     if (q && q.length) {
@@ -1016,6 +1028,7 @@ export class SimEngine {
           this.waitSum += this.time - a.waitStart;
           this.waitCount++;
           this.boardings++;
+          this.bump(this.stopBoard, stopNode);
           // fare revenue
           const fare = rt.line.fare * this.fareMult; // difficulty scales operator revenue
           if (isFinite(this.budget)) this.budget += fare;
@@ -1321,6 +1334,20 @@ export class SimEngine {
     const events = this.events;
     this.events = [];
 
+    // per-station traffic, keyed by graph node (board/alight/pass cumulative;
+    // wait is live) — summed across any lines that share the node (interchange)
+    const stopStats: Record<number, { board: number; alight: number; pass: number; wait: number }> = {};
+    for (const rt of this.lines) {
+      for (let i = 0; i < rt.line.stops.length; i++) {
+        const node = rt.line.stops[i].node;
+        const e = stopStats[node] || (stopStats[node] = { board: 0, alight: 0, pass: 0, wait: 0 });
+        e.board = this.stopBoard.get(node) || 0;
+        e.alight = this.stopAlight.get(node) || 0;
+        e.pass = this.stopPass.get(node) || 0;
+        e.wait += rt.waitQ[i]?.length || 0;
+      }
+    }
+
     return {
       simTime: this.time,
       day: Math.floor(this.elapsed / SIM.daySeconds),
@@ -1357,6 +1384,7 @@ export class SimEngine {
         : null,
       events,
       vehicles,
+      stopStats,
     };
   }
 }

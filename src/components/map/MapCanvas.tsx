@@ -13,7 +13,7 @@ import { Graph, haversine } from "@/lib/geo/graph";
 import { linePathCoords } from "@/lib/network/line";
 import type { LineMode, ODCorridor, PlacedStation, PoiData, SnapshotMeta, TransitLine, ZoneData } from "@/lib/types";
 import type { SnapPair } from "@/lib/worker/useSim";
-import { MAP, MODE_PARAMS, SIM, type Tool } from "@/lib/config";
+import { MAP, MODE_PARAMS, SIM, TRAVEL, type Tool } from "@/lib/config";
 
 const WIDTH: Record<LineMode, number> = { metro: 6, songthaew: 3.5 };
 
@@ -123,6 +123,7 @@ interface Props {
   onChainStation: (id: string) => void;
   onAddRoutePoint: (lon: number, lat: number) => void;
   onDemolishStation: (id: string) => void;
+  onStationInfo: (s: PlacedStation) => void;
   onDemolishLine: (id: string) => void;
   selectedLineId: string | null;
   onSelectLine: (id: string | null) => void;
@@ -140,6 +141,7 @@ interface FrameState {
   lineKey: string;
   lineRenders: LineRender[];
   stopRenders: StopRender[];
+  interchanges: { position: [number, number] }[];
   vehicles: SnapshotMeta["vehicles"] | undefined;
   snapRef: React.RefObject<SnapPair>;
   roadSegs: [number, number][][];
@@ -151,6 +153,7 @@ interface FrameState {
   deckClickAt: React.MutableRefObject<number>;
   onSelectLine: (id: string | null) => void;
   onDemolishLine: (id: string) => void;
+  onStationInfo: (s: PlacedStation) => void;
   showDensity: boolean;
   showAgents: boolean;
   showCoverage: boolean;
@@ -353,6 +356,14 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
                 // (this is how songthaew routes — which have no stations — get deleted)
                 if (fr.tool === "pan") {
                   fr.deckClickAt.current = performance.now();
+                  // a click that lands on a station inspects it, not the line
+                  const c = info.coordinate as [number, number] | undefined;
+                  if (c && fr.stations.length) {
+                    const mpp = (156543.03392 * Math.cos((c[1] * Math.PI) / 180)) / Math.pow(2, fr.zoom);
+                    let best: PlacedStation | null = null, bd = 26 * mpp;
+                    for (const s of fr.stations) { const d = haversine(c[0], c[1], s.lon, s.lat); if (d < bd) { bd = d; best = s; } }
+                    if (best) { fr.onStationInfo(best); return true; }
+                  }
                   fr.onSelectLine(o.id);
                   return true;
                 }
@@ -498,6 +509,28 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
         );
       }
 
+      // --- interchanges: where two lines connect (riders can transfer) — the
+      // universal white "interchange" ring, so the player SEES the network is
+      // connected the moment two lines come within a transfer walk.
+      if (f.interchanges.length) {
+        layers.push(
+          new ScatterplotLayer({
+            id: "interchange-ring",
+            data: f.interchanges,
+            getPosition: (d: { position: [number, number] }) => d.position,
+            radiusUnits: "pixels",
+            getRadius: 7,
+            filled: true,
+            getFillColor: [255, 255, 255, 235],
+            stroked: true,
+            getLineColor: [46, 33, 19, 235],
+            lineWidthUnits: "pixels",
+            getLineWidth: 2,
+            parameters: { depthTest: false },
+          }),
+        );
+      }
+
       // --- placed stations as Lanna chedi markers (chained ones go teak) -
       if (f.stations.length) {
         const chained = new Set(f.railDraft);
@@ -631,7 +664,7 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
 export default function MapCanvas(props: Props) {
   const {
     graph, lines, vehicles, snapRef, tool, stations, railDraft, routeDraft,
-    onPlaceStation, onChainStation, onAddRoutePoint, onDemolishStation, onDemolishLine,
+    onPlaceStation, onChainStation, onAddRoutePoint, onDemolishStation, onStationInfo, onDemolishLine,
     selectedLineId, onSelectLine, center,
     showDensity, showAgents, showCoverage, zones, pois, simTime, selectedOD,
   } = props;
@@ -659,7 +692,7 @@ export default function MapCanvas(props: Props) {
     return segs;
   }, [graph]);
 
-  const { lineRenders, stopRenders, lineKey } = useMemo(() => {
+  const { lineRenders, stopRenders, interchanges, lineKey } = useMemo(() => {
     const lr: LineRender[] = [];
     const sr: StopRender[] = [];
     if (graph) {
@@ -672,9 +705,26 @@ export default function MapCanvas(props: Props) {
         for (const s of line.stops) sr.push({ lon: s.lon, lat: s.lat, color: line.color, access });
       }
     }
+    // interchanges: where two DIFFERENT lines have stops within the transfer walk
+    // (TRAVEL.transferMaxM) — riders can change here. Mirrors the engine's
+    // buildTransfers (closest stop-pair per line pair) so the map shows what the
+    // sim actually treats as connected.
+    const ix: { position: [number, number] }[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      for (let j = i + 1; j < lines.length; j++) {
+        const A = lines[i].stops, B = lines[j].stops;
+        let best: [number, number] | null = null, bd = Infinity;
+        for (const a of A) for (const b of B) {
+          const d = haversine(a.lon, a.lat, b.lon, b.lat);
+          if (d <= TRAVEL.transferMaxM && d < bd) { bd = d; best = [(a.lon + b.lon) / 2, (a.lat + b.lat) / 2]; }
+        }
+        if (best) ix.push({ position: best });
+      }
+    }
     return {
       lineRenders: lr,
       stopRenders: sr,
+      interchanges: ix,
       // include a geometry signal (length + stop count) so EXTENDING a line
       // (same id + colour, new path) rebuilds the cached rail layer — without
       // it the extended track never re-renders.
@@ -700,13 +750,13 @@ export default function MapCanvas(props: Props) {
   const hourBucket = Math.floor(hour);
 
   const frameRef = useRef<FrameState>({
-    lineKey, lineRenders, stopRenders, vehicles, snapRef, roadSegs, drawActive, tool,
-    stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, showDensity, showAgents, showCoverage, presence, hour, hourBucket, zoom, selectedOD,
+    lineKey, lineRenders, stopRenders, interchanges, vehicles, snapRef, roadSegs, drawActive, tool,
+    stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, onStationInfo, showDensity, showAgents, showCoverage, presence, hour, hourBucket, zoom, selectedOD,
   });
   useEffect(() => {
     frameRef.current = {
-      lineKey, lineRenders, stopRenders, vehicles, snapRef, roadSegs, drawActive, tool,
-      stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, showDensity, showAgents, showCoverage, presence, hour, hourBucket, zoom, selectedOD,
+      lineKey, lineRenders, stopRenders, interchanges, vehicles, snapRef, roadSegs, drawActive, tool,
+      stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, onStationInfo, showDensity, showAgents, showCoverage, presence, hour, hourBucket, zoom, selectedOD,
     };
   });
 
@@ -752,6 +802,10 @@ export default function MapCanvas(props: Props) {
         } else if (tool === "demolish") {
           const s = nearestStation(lng, lat);
           if (s) onDemolishStation(s.id);
+        } else if (tool === "pan") {
+          // click a station to inspect its traffic (board / alight / wait / pass)
+          const s = nearestStation(lng, lat);
+          if (s) onStationInfo(s);
         }
       }}
       onMouseDown={(e) => {

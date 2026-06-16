@@ -29,7 +29,7 @@ await page.screenshot({path:"/tmp/cine-title.png"});
 if (hasBegin) await page.getByRole("button",{name:/Begin your term|เริ่มวาระ/}).first().click();
 await page.waitForTimeout(900);
 const tStart = await txt();
-console.log("[cine] Begin → start screen shows:", /1 · Goal|1 · เป้าหมาย|Choose your goal|เลือกเป้าหมาย/.test(tStart)?"✓":"⚠");
+console.log("[cine] Begin → start screen shows:", /Choose your path|เลือกเส้นทาง|Win the Cars|เอาชนะรถยนต์/.test(tStart)?"✓":"⚠");
 console.log("[cine] cinematic dismissed:", /Skip ⏭|ข้าม ⏭/.test(tStart)?"⚠ still up":"✓ closed");
 
 // 4) reload → cinematic AUTO-PLAYS AGAIN every entry (user wants it every time)
@@ -39,7 +39,7 @@ console.log("[cine] auto-plays AGAIN on reload (every entry):", /Skip ⏭|ข้
 // Skip ⏭ works → jumps straight to the start screen
 await page.getByRole("button",{name:/Skip ⏭|ข้าม ⏭/}).first().click(); await page.waitForTimeout(700);
 const tSkip = await txt();
-console.log("[cine] Skip ⏭ → start screen:", /1 · Goal|1 · เป้าหมาย/.test(tSkip) && !/Skip ⏭|ข้าม ⏭/.test(tSkip)?"✓":"⚠");
+console.log("[cine] Skip ⏭ → start screen:", /Choose your path|เลือกเส้นทาง|Win the Cars|เอาชนะรถยนต์/.test(tSkip) && !/Skip ⏭|ข้าม ⏭/.test(tSkip)?"✓":"⚠");
 
 console.log("[done] CONSOLE ERRORS:", errs.length?JSON.stringify(errs.slice(0,5)):"none ✓");
 await ctx.close();

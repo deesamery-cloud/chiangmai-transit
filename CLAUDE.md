@@ -50,6 +50,11 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
   basemap is muted via a CSS filter on `.maplibregl-canvas` (deck overlay stays full-saturation).
   Map build interaction works on mouse AND touch — `onClick` (tap) places/chains stations; the
   press-drag connect is mirrored to `onTouchStart/Move/End` for fingers.
+- `src/components/ui/Icon.tsx` — the **bespoke HUD icon set** (`<Icon name size/>`, 24×24 currentColor SVGs:
+  metro/songthaew/wait/demand/people/coverage/sound/mute/pan/speed/governor/team/money/station/track/demolish/
+  happy/unhappy/star/trophy/play/pause…). **Convention: NO emoji as functional icons in the HUD** — emoji read
+  as "generic AI dashboard"; use `<Icon>` (bottom-bar buttons map `tool.id → TOOL_ICON`). Incidental emoji inside
+  data (goal/difficulty/event/demographic glyphs) remain.
 - `src/components/cinematic/OpeningCinematic.tsx` — a ~60s **cinematic opening** ("how you become Governor")
   that plays **every time the game is entered** (skippable via the Skip ⏭ button; `showCinematic` inits `true`).
   `localStorage cm-cine-skip==="1"` is a dev/test escape hatch to suppress it (the verify scripts set it). A
@@ -63,14 +68,14 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
   Lamphun, orange→Nimman/CMU, gold→railway, teal→airport). Used by the start screen's "Start from existing
   songthaew" option, which seeds them via `sim.addLine(corridor.points, "songthaew", color)` once the worker
   is ready (`seedExistingRef`).
-- `src/app/page.tsx` — the whole HUD: **start screen is a goal → start-from → difficulty → Start flow**
-  (goal cards SELECT not start; "start-from" = 🆕 scratch or 🛻 the real songthaew net; the run seed is now
-  HIDDEN + auto-randomised, no dice UI). It's styled to **match the cinematic**: a full-bleed photo backdrop
-  (`public/cinematic/6.jpg`, the cinematic's final dusk scene → seamless hand-off) with `.cm-bg-drift` ambient
-  Ken-Burns + a warm dark scrim, a white+gold hero title over it (force `color:#fff` — `.wordmark` is dark
-  teak), and the wizard in a `.panel-glass` frosted card (translucent parchment + blur). NOTE: do NOT put the
-  `.lanna-bg` class on an `absolute inset-0` layer — `.lanna-bg{position:relative}` is un-layered CSS that
-  beats Tailwind's `absolute` and collapses it to height 0; use a plain backdrop div + `style background`. Left panel (clock/economy/
+- `src/app/page.tsx` — the whole HUD. **Start screen = an RPG-style full-screen mode select** (NOT a form):
+  a big cinematic photo per goal (`public/modeselect/{cars,money,grade,free}.jpg`, `GOAL_PHOTO`) fills the
+  screen and crossfades as you hover/pick (`focusGoal` for hover, `selGoal` for the choice); a huge white+gold
+  hero shows the featured goal's name/target/desc; a bottom deck has 4 photo TILES + a dark control row
+  (`.rpg-chip` start-from + difficulty + `.rpg-start` "Begin your term"). Dark cinematic UI (`.rpg-ghost/.rpg-chip/
+  .rpg-start` in globals.css), not the cream dashboard. Run seed is hidden + auto. NOTE: don't put `.lanna-bg`
+  on an `absolute inset-0` layer (its `position:relative` beats Tailwind `.absolute` → height 0); innerText
+  reflects CSS `uppercase`, so match deck labels case-insensitively in tests. Left panel (clock/economy/
   **single City Score grade** + an **inline grade breakdown** = 3 weighted bars ·68/·18/·14 + "biggest
   gain" next-step + satisfaction + per-line performance), right summary (stats + spark +
   **Travel-demand/OD panel**), bottom control bar, win/lose overlays, i18n (`t(en,th)`), undo,
@@ -98,6 +103,18 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
   `AdvisorBriefing` (a full 4-advisor panel) still exists but is no longer auto-shown. The dock also hosts
   the People/Demand/Coverage/Sound toggles. Verify: `scripts/verify-advisors.mjs` + `verify-bottombar.mjs` +
   `verify-startflow.mjs` (start wizard, hidden seed, songthaew seeding, coverage, songthaew station-build).
+- **Station inspector**: click a placed station in Pan → a popover shows its traffic (boarded / alighted /
+  waiting-now / passed-through) + which lines call there (+ "interchange"). Engine tracks per-graph-node counters
+  (`stopBoard`/`stopAlight`/`stopPass` maps, `bump()` in `serviceStop`) → `SnapshotMeta.stopStats[node]`; MapCanvas
+  routes a pan-click on a station to `onStationInfo` (a station-click wins over line-select). `infoStation` in page.tsx.
+- **Interchanges shown on the map**: `MapCanvas` computes interchange points (closest stop-pair between two
+  DIFFERENT lines within `TRAVEL.transferMaxM`=500 m, mirroring the engine's `buildTransfers`) and draws a white
+  "interchange" ring there — so the player SEES the network is connected (songthaew↔metro, songthaew↔songthaew,
+  etc.). The build-success toast also reports "🔗 connects to N lines" (`connectsTo()` in page.tsx).
+- **HUD heritage reskin** (de-"AI dashboard"): panels use `.panel` (now a carved plaque — warm gradient + gold
+  inner hairline) + `.panel-frame` (faint Lanna lattice texture) on the main panels; the City Score is a gold
+  `GradeSeal` medallion (not a flat chip); numbers are themed — `--font-mono` → Kanit tabular, hero numbers
+  (score/clock/budget/speed) use `.num-hero` (Trirong), small values `.num`/`tabular-nums`. No Geist Mono.
 - `src/app/{layout.tsx,globals.css}` — Lanna heritage theme (parchment + temple gold + cinnabar +
   jade), CSS-variable driven; `.panel`, `.panel-accent`, `.gold-rule`, `.wordmark`, `LannaEmblem`,
   the control grammars (`.segmented/.seg/.seg-on`, `.vtoggle/.vtoggle-on`), a small motion vocab
@@ -126,7 +143,9 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
   The ECONOMY stays on sim units (money is unscaled).
 - **Crowding + waits → satisfaction** caps the grade; riders complain when packed/slow.
 - **Fares** are a demand lever (per-line, ฿5 steps): ↑fare → fewer riders / more revenue.
-- **Difficulty** (Easy/Medium/Challenge/Hard) scales budget/cost/opex/fare/capacity + targets.
+- **Difficulty** (Easy/Medium/Challenge/Hard) scales budget/cost/opex/fare/capacity + targets, AND
+  `gradeMult` (Easy 1.25 → Hard 0.85) which multiplies the City Score so the GRADE visibly climbs faster on
+  Easy / is a grind on Hard (playtest fix: difficulty used to feel cosmetic on the scoreboard).
 - **Modes** (`LineMode = "metro" | "songthaew"`): metro = fast, grade-separated trunk (station→track
   build). Songthaew = cheap, road-bound, tiny-capacity FEEDER (draw-a-route via `addLine`/`buildLine`);
   it overcrowds on busy corridors + adds traffic, so it complements metro and can't reach A alone. Road

@@ -175,6 +175,8 @@ export interface SnapshotMeta {
   ridersByKind: { resident: number; student: number; tourist: number };
   activeEvent: { id: string; icon: string; daysLeft: number } | null; // current light event
   events: string[]; // new event messages since last snapshot (for the ticker)
+  // per-station traffic keyed by graph node — click a station to see it
+  stopStats: Record<number, { board: number; alight: number; pass: number; wait: number }>;
   vehicles: {
     lon: number;
     lat: number;

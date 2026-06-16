@@ -13,7 +13,7 @@ await page.goto(URL,{waitUntil:"load",timeout:60000}); await page.waitForTimeout
 
 // 1) start a game → appointment cutscene appears (select goal, then Start)
 await page.getByText(/Grade A City|เมืองเกรด A/).first().click();
-await page.getByRole("button",{name:/Start building|เริ่มสร้างเมือง/}).first().click();
+await page.getByRole("button",{name:/Begin your term|เริ่มวาระ/}).first().click();
 await page.waitForTimeout(900);
 const t0 = await txt();
 console.log("[intro] appointment cutscene:", /new Governor|ผู้ว่าราชการคนใหม่/.test(t0)?"✓ shown":"✗ MISSING");

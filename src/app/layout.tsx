@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist_Mono, Noto_Sans_Thai, Kanit, Trirong } from "next/font/google";
+import { Noto_Sans_Thai, Kanit, Trirong } from "next/font/google";
 import "./globals.css";
 
 // Body / UI face — Kanit covers BOTH Thai and Latin in one characterful family
@@ -19,13 +19,10 @@ const trirong = Trirong({
   weight: ["400", "500", "600", "700"],
 });
 
-// Monospace digits for the HUD (clock / money / stats stay tabular-aligned).
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// (Numbers are now themed: Kanit tabular for stats, Trirong display for hero
+// numbers — see --font-mono / .num-hero in globals.css. No SaaS monospace face.)
 
-// Thai-capable fallback (covers ฿ in the mono stack + any glyph gaps).
+// Thai-capable fallback (covers ฿ + any glyph gaps).
 const notoThai = Noto_Sans_Thai({
   variable: "--font-thai",
   subsets: ["thai", "latin"],
@@ -55,7 +52,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${kanit.variable} ${trirong.variable} ${geistMono.variable} ${notoThai.variable} h-full antialiased`}
+      className={`${kanit.variable} ${trirong.variable} ${notoThai.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

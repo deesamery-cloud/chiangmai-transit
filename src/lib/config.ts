@@ -309,6 +309,7 @@ export const DIFFICULTIES: Record<
     opexMult: number; // × daily operating cost
     fareMult: number; // × fare revenue per boarding
     capacityMult: number; // × train capacity (lower → crowds faster)
+    gradeMult: number; // × the City Score — so EASY visibly climbs the grade faster, HARD slower (difficulty is felt on the scoreboard, not just the budget)
     bankruptcy: boolean;
     deadlineDays: number | null; // reach the goal within N days, else you lose
     targets: Partial<Record<GoalKind, GoalTargets>>;
@@ -322,6 +323,7 @@ export const DIFFICULTIES: Record<
     opexMult: 0.6,
     fareMult: 1.3,
     capacityMult: 1.15, // was 1.3 — let crowding occasionally bite so the core loop shows
+    gradeMult: 1.25, // grade climbs noticeably faster on Easy
     bankruptcy: false,
     deadlineDays: null,
     targets: {
@@ -338,6 +340,7 @@ export const DIFFICULTIES: Record<
     opexMult: 1.35, // ongoing maintenance bites
     fareMult: 1.0,
     capacityMult: 1.0,
+    gradeMult: 1.0, // baseline
     bankruptcy: true, // debt accrues interest — money is a real constraint on Medium+
     deadlineDays: null,
     targets: {
@@ -356,6 +359,7 @@ export const DIFFICULTIES: Record<
     opexMult: 1.2,
     fareMult: 0.9,
     capacityMult: 0.9,
+    gradeMult: 0.92, // grade climbs a bit slower
     bankruptcy: true,
     deadlineDays: null,
     targets: {
@@ -372,6 +376,7 @@ export const DIFFICULTIES: Record<
     opexMult: 1.5,
     fareMult: 0.8,
     capacityMult: 0.8,
+    gradeMult: 0.85, // grade is a real grind on Hard — needs a denser network
     bankruptcy: true,
     deadlineDays: 85, // was 60 — too tight for deliberate min-maxing
     targets: {

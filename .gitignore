@@ -42,3 +42,6 @@ next-env.d.ts
 
 # data pipeline backups (regenerated; not needed in the repo)
 *.bak
+
+# throwaway ad-hoc playtest/debug scripts (root-level experiments)
+/*.mjs
