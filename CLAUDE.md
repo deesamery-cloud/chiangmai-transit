@@ -48,13 +48,41 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
   basemap is muted via a CSS filter on `.maplibregl-canvas` (deck overlay stays full-saturation).
   Map build interaction works on mouse AND touch — `onClick` (tap) places/chains stations; the
   press-drag connect is mirrored to `onTouchStart/Move/End` for fingers.
-- `src/app/page.tsx` — the whole HUD: start screen (goals + difficulty), left panel (clock/economy/
+- `src/lib/cm-songthaew.ts` — Chiang Mai's REAL songthaew (rod daeng) network as ~6 route corridors
+  (researched: Warorot hub + colour-coded directions — red old-city loop, green→Mae Jo, blue→Sarapee/
+  Lamphun, orange→Nimman/CMU, gold→railway, teal→airport). Used by the start screen's "Start from existing
+  songthaew" option, which seeds them via `sim.addLine(corridor.points, "songthaew", color)` once the worker
+  is ready (`seedExistingRef`).
+- `src/app/page.tsx` — the whole HUD: **start screen is a goal → start-from → difficulty → Start flow**
+  (goal cards SELECT not start; "start-from" = 🆕 scratch or 🛻 the real songthaew net; the run seed is now
+  HIDDEN + auto-randomised, no dice UI). Left panel (clock/economy/
   **single City Score grade** + an **inline grade breakdown** = 3 weighted bars ·68/·18/·14 + "biggest
   gain" next-step + satisfaction + per-line performance), right summary (stats + spark +
   **Travel-demand/OD panel**), bottom control bar, win/lose overlays, i18n (`t(en,th)`), undo,
-  autosave (localStorage `cm-save-v1`). The bottom bar uses **three distinct control grammars**: gold
-  is reserved for the ARMED build tool; time-speed + Metro/Songthaew mode are `.segmented` controls
-  (dark selected segment); 🔥 Density / 👣 People / 🎯 Demand / 🌿 Zen are `.vtoggle` on/off switches.
+  autosave (localStorage `cm-save-v1`). **Bottom-center bar = exactly 4 primary buttons** (`openMenu`
+  state): ⏩ Speed, 🚆 Metro, 🛻 Songthaew, 🖐️ Pan (เลื่อนแผนที่). Clicking Speed/Metro/Songthaew toggles a
+  popover ABOVE the bar with that group's sub-features — **Speed = a 1×–1000× range gauge** (+ play/pause +
+  1/10/100/1000 preset chips), **Metro** = place-stations / connect / demolish (+ the contextual build strip:
+  colour picker / station count / Finish / Cancel), **Songthaew** = draw-route / demolish (+ its build strip).
+  Both Metro and Songthaew build via **place stations → connect** (the station tools are shared; `buildMode`
+  decides what a connect produces) — songthaew can ALSO still draw a free route. The station strip shows a
+  **coverage note** (each station = a ~800 m walk-shed). Pan just activates pan + closes menus. The selected-line edit strip (＋vehicle / fare / recolour / remove)
+  is its own popover above the bar. The active button gets the gold accent. 🔥 **Density and 🌿 Zen are removed**;
+  👣 People / 🎯 Demand / 📐 Coverage / 🔊 Sound toggles now live **under the advisor dock** (bottom-right),
+  passed into `AdvisorDock`. **📐 Coverage** draws translucent ~800 m walk-shed circles around every stop +
+  placed station (MapCanvas `showCoverage` ScatterplotLayer, radiusUnits "meters") so players SEE the area
+  each station serves.
+- `src/lib/advisors.ts` + `src/components/advisors/AdvisorPanels.tsx` — the Governor's **4-advisor team**
+  ("the 4 ladies who assist"): Ploy (metro), Napha (songthaew), Kanya (finance), Mali (city rep). `advisorBrief(id,
+  meta, lines)` turns live `SnapshotMeta` into each advisor's bilingual advice (tone good/warn/info). `AdvisorIntro`
+  = the appointment cutscene shown once on a fresh game. **`AdvisorDock` is the primary advisory UI** — a persistent
+  bottom-right dock with all 4 faces always visible; click a face → that advisor's live advice pops up above the dock
+  (click again / ✕ to close). The faces pulse (cm-pop-in, keyed on `meta.day`) when a new day starts. The
+  👣 People / 🎯 Demand / 🔊 Sound view toggles are parked in a row **under the faces** (props from page.tsx).
+  Portraits in `public/advisors/*.jpg` (Magnific-generated), loaded via `<img>` with an emoji fallback.
+  `AdvisorBriefing` (a full 4-advisor panel) still exists but is no longer auto-shown. The dock also hosts
+  the People/Demand/Coverage/Sound toggles. Verify: `scripts/verify-advisors.mjs` + `verify-bottombar.mjs` +
+  `verify-startflow.mjs` (start wizard, hidden seed, songthaew seeding, coverage, songthaew station-build).
 - `src/app/{layout.tsx,globals.css}` — Lanna heritage theme (parchment + temple gold + cinnabar +
   jade), CSS-variable driven; `.panel`, `.panel-accent`, `.gold-rule`, `.wordmark`, `LannaEmblem`,
   the control grammars (`.segmented/.seg/.seg-on`, `.vtoggle/.vtoggle-on`), a small motion vocab
@@ -64,8 +92,18 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
 
 ## Core gameplay model
 - **City Score / grade** (`page.tsx`): demand-dominated — `(0.68·served + 0.18·coverage +
-  0.14·trafficRelief) × (0.82+0.18·satisfaction)`, thresholds A82/B66/C46/D26. A small metro scores
+  0.14·trafficRelief) × (0.82+0.18·satisfaction)`, thresholds A82/B66/C44/D26. A small metro scores
   F; an A needs a real multi-line network. `OD.accessM` (900 m) governs what counts as "served".
+  **"Served" is METRO-WEIGHTED** (`refreshOD` in engine.ts): a corridor served only by songthaew counts
+  `OD.songthaewServeCredit` (0.3) and stays red ("build metro here"); only a METRO journey is full credit
+  + green. So songthaew (a feeder) can't reach a high grade alone. Because satisfaction multiplies the score,
+  **an A also needs fleet investment** to relieve crowding (sat near 0 caps the grade at ~B). Measure tiers
+  with `pnpm dlx tsx scripts/measure-existing.ts`.
+- **Walk catchment is MODE-AWARE** (`MODE_PARAMS[mode].walkAccessM`): metro stations draw a wide ~800 m
+  walk-shed; songthaew stops only a ~200 m local hail (you board a rod daeng near home). Used by the engine's
+  coverage calc + journey access (`bestTransitJourney` `accFor`) AND the 📐 Coverage overlay (per-stop circle
+  radius). So a songthaew web covers only thin strips along its routes (the seeded "existing" net ≈ 24%
+  coverage → **Grade D/F start**); metro is what gives real area coverage. The station build-note is mode-aware.
 - **Demographics**: residents (density-weighted homes), students (campus-anchored), tourists
   (hotel↔old-city/markets, ride the most). HUD shows the rider mix.
 - **Ridership scale**: `PEOPLE_PER_AGENT` scales DISPLAY flow numbers to real-city magnitude
@@ -98,9 +136,8 @@ project ("Chiang Mai Transit — Lanna UI") via the DesignSync tool / `/design-s
 - Keep the SIMULATION + ECONOMY in sim units; scale only human-facing displays.
 - Tune gameplay in `config.ts` constants first; verify with `sim-smoke` + a `verify-*.mjs` before
   declaring done. Aim for 0 console errors.
-- **UI grammars**: reserve gold for exactly one meaning — the armed build tool. Pick-one controls use
-  `.segmented`; on/off overlay toggles use `.vtoggle`. Don't reintroduce `.btn-active` (gold) for mode/
-  speed/toggles.
+- **UI grammars**: gold = the active/armed control (the open primary bottom-bar button or the armed build
+  tool). On/off overlay toggles (People / Demand / Sound, now under the advisor dock) use `.vtoggle`.
 - **i18n**: default language is **EN**. Every player-facing string on the critical path must go through
   `t(en, th)` and lead with the active language — including canvas hints, tool labels, coachmark beats,
   and worker `setNotice` errors (no bare single-language strings). Don't letter-space/track Thai runs.

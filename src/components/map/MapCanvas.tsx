@@ -13,7 +13,7 @@ import { Graph, haversine } from "@/lib/geo/graph";
 import { linePathCoords } from "@/lib/network/line";
 import type { LineMode, ODCorridor, PlacedStation, PoiData, SnapshotMeta, TransitLine, ZoneData } from "@/lib/types";
 import type { SnapPair } from "@/lib/worker/useSim";
-import { MAP, type Tool } from "@/lib/config";
+import { MAP, MODE_PARAMS, SIM, type Tool } from "@/lib/config";
 
 const WIDTH: Record<LineMode, number> = { metro: 6, songthaew: 3.5 };
 
@@ -107,6 +107,7 @@ interface StopRender {
   lon: number;
   lat: number;
   color: [number, number, number];
+  access: number; // this stop's walk catchment (m) — by mode
 }
 
 interface Props {
@@ -128,6 +129,7 @@ interface Props {
   center: [number, number];
   showDensity: boolean;
   showAgents: boolean;
+  showCoverage: boolean;
   zones: ZoneData | null;
   pois: PoiData | null;
   simTime: number;
@@ -151,6 +153,7 @@ interface FrameState {
   onDemolishLine: (id: string) => void;
   showDensity: boolean;
   showAgents: boolean;
+  showCoverage: boolean;
   presence: PresencePt[];
   hour: number;
   hourBucket: number;
@@ -201,6 +204,35 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
             parameters: { depthTest: false },
           }),
         );
+      }
+
+      // --- station coverage (toggleable): each stop pulls riders within the
+      // walk-shed (SIM.maxAccessWalkM ≈ 800 m / ~10 min), so circles show what
+      // area each station actually serves; overlaps darken = better coverage.
+      if (f.showCoverage) {
+        // radius = each stop's MODE catchment: songthaew = small local hail (~200 m),
+        // metro = wide walk-shed (~800 m). Placed (unconnected) stations show the
+        // metro-scale potential until you connect them.
+        const cov: { position: [number, number]; access: number }[] = [];
+        for (const s of f.stopRenders) cov.push({ position: [s.lon, s.lat], access: s.access });
+        for (const s of f.stations) cov.push({ position: [s.lon, s.lat], access: SIM.maxAccessWalkM });
+        if (cov.length) {
+          layers.push(
+            new ScatterplotLayer({
+              id: "coverage",
+              data: cov,
+              getPosition: (d: { position: [number, number] }) => d.position,
+              radiusUnits: "meters",
+              getRadius: (d: { access: number }) => d.access,
+              getFillColor: [47, 143, 107, 30],
+              stroked: true,
+              getLineColor: [47, 143, 107, 110],
+              lineWidthUnits: "pixels",
+              getLineWidth: 1,
+              parameters: { depthTest: false },
+            }),
+          );
+        }
       }
 
       // --- buildable roads (while placing stations / laying track) --------
@@ -601,7 +633,7 @@ export default function MapCanvas(props: Props) {
     graph, lines, vehicles, snapRef, tool, stations, railDraft, routeDraft,
     onPlaceStation, onChainStation, onAddRoutePoint, onDemolishStation, onDemolishLine,
     selectedLineId, onSelectLine, center,
-    showDensity, showAgents, zones, pois, simTime, selectedOD,
+    showDensity, showAgents, showCoverage, zones, pois, simTime, selectedOD,
   } = props;
   const dragging = useRef(false);
   const dragMoved = useRef(false);
@@ -636,7 +668,8 @@ export default function MapCanvas(props: Props) {
         const path: [number, number][] = [];
         for (let i = 0; i < flat.length; i += 2) path.push([flat[i], flat[i + 1]]);
         lr.push({ id: line.id, path, color: line.color, width: WIDTH[line.mode], selected: line.id === selectedLineId });
-        for (const s of line.stops) sr.push({ lon: s.lon, lat: s.lat, color: line.color });
+        const access = MODE_PARAMS[line.mode].walkAccessM;
+        for (const s of line.stops) sr.push({ lon: s.lon, lat: s.lat, color: line.color, access });
       }
     }
     return {
@@ -668,12 +701,12 @@ export default function MapCanvas(props: Props) {
 
   const frameRef = useRef<FrameState>({
     lineKey, lineRenders, stopRenders, vehicles, snapRef, roadSegs, drawActive, tool,
-    stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, showDensity, showAgents, presence, hour, hourBucket, zoom, selectedOD,
+    stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, showDensity, showAgents, showCoverage, presence, hour, hourBucket, zoom, selectedOD,
   });
   useEffect(() => {
     frameRef.current = {
       lineKey, lineRenders, stopRenders, vehicles, snapRef, roadSegs, drawActive, tool,
-      stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, showDensity, showAgents, presence, hour, hourBucket, zoom, selectedOD,
+      stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, showDensity, showAgents, showCoverage, presence, hour, hourBucket, zoom, selectedOD,
     };
   });
 

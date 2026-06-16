@@ -70,6 +70,7 @@ export interface UseSim {
     stations: PlacedStation[],
     color: [number, number, number],
     fleet: number,
+    mode?: LineMode,
   ) => TransitLine | null;
   removeLine: (id: string) => void;
   setAllLines: (lines: TransitLine[]) => void; // replace the whole network (undo/restore)
@@ -285,11 +286,11 @@ export function useSim(): UseSim {
     [send],
   );
   const replaceLineFromStations = useCallback(
-    (lineId: string, stations: PlacedStation[], color: [number, number, number], fleet: number) => {
+    (lineId: string, stations: PlacedStation[], color: [number, number, number], fleet: number, mode: LineMode = "metro") => {
       const g = graphRef.current;
       const router = routerRef.current;
       if (!g || !router) return null;
-      const l = buildLineFromStations(g, router, stations, "metro", color, fleet, lineId);
+      const l = buildLineFromStations(g, router, stations, mode, color, fleet, lineId);
       if (!l) {
         setNotice("เชื่อมไม่ได้ — เลือกสถานีบนถนนที่เชื่อมกัน · Couldn\u2019t route that — pick stations on connected streets.");
         return null;

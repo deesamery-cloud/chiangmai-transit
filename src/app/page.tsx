@@ -24,11 +24,13 @@ import {
   type Tool,
 } from "@/lib/config";
 import { playSfx, setSfxMuted } from "@/lib/sfx";
+import { AdvisorIntro, AdvisorDock } from "@/components/advisors/AdvisorPanels";
+import { CM_SONGTHAEW } from "@/lib/cm-songthaew";
 
 const MapCanvas = dynamic(() => import("@/components/map/MapCanvas"), { ssr: false });
 
 const CENTER: [number, number] = [98.984, 18.79];
-const SPEEDS = [1, 60, 300, 1200];
+const SPEEDS = [1, 10, 100, 1000]; // quick-preset chips for the speed gauge (slider covers 1–1000×)
 const rgb = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`;
 // per-line crowding 1..5 colours (match the train ramp) + a load→level helper
 const CROWD_COLORS = ["#2f8f6b", "#7fa53c", "#d9a441", "#c26a2a", "#b5462e"];
@@ -58,16 +60,18 @@ export default function Page() {
   const { loaded, started, ready, meta, lines, playing, speed, goal } = sim;
 
   const [tool, setTool] = useState<Tool>("pan");
-  const [buildMode, setBuildMode] = useState<"metro" | "songthaew">("metro"); // which mode the build tools build
   const [routeDraft, setRouteDraft] = useState<{ lon: number; lat: number }[]>([]); // songthaew route waypoints
-  const [showDensity, setShowDensity] = useState(false); // 🔥 population-density heat overlay
+  const [openMenu, setOpenMenu] = useState<"speed" | "metro" | "songthaew" | null>(null); // which bottom-bar menu is expanded
   const [showAgents, setShowAgents] = useState(false); // 👣 commuter dots (walk/drive/ride = traffic) — OFF by default for a clean starting map
   const [showOD, setShowOD] = useState(false); // 🎯 travel-demand panel — OFF by default; player opens it when planning
+  const [showCoverage, setShowCoverage] = useState(false); // 📐 station walk-shed coverage circles
   const [selectedOD, setSelectedOD] = useState<ODCorridor | null>(null); // a corridor highlighted on the map
   const [seed, setSeed] = useState(100000); // per-run seed (randomised on mount to avoid an SSR/client mismatch)
-  const [zen, setZen] = useState(false); // minimal HUD: map + grade + palette only
   const [muted, setMuted] = useState(false); // 🔊 sound on/off
-  const mode: LineMode = "metro"; // metro-only game
+  // which mode the station→connect build tools produce (metro or songthaew).
+  // Songthaew can be built EITHER by drawing a route OR by placing+connecting
+  // stations (the station tools are shared; this picks what a connect builds).
+  const [buildMode, setBuildMode] = useState<LineMode>("metro");
   // stations the player has placed (standalone until connected with rail)
   const [stations, setStations] = useState<PlacedStation[]>([]);
   // ordered ids being connected into a line right now (rail appears on Finish)
@@ -95,8 +99,16 @@ export default function Page() {
   const undoRef = useRef<() => void>(() => {});
   const [showCoach, setShowCoach] = useState(false); // first-run just-in-time tutorial
   const [coachAdv, setCoachAdv] = useState(3); // advanced tutorial beat (≥3) after the first line
+  // advisory team ("the 4 ladies who assist"): an appointment cutscene on a fresh
+  // game, then a persistent bottom-right dock — all 4 faces always visible, click
+  // a face for that advisor's live advice (the team is the main advisory UI)
+  const [showIntro, setShowIntro] = useState(false); // governor appointment cutscene
   const [lang, setLang] = useState<"en" | "th">("en"); // TH/EN toggle
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
+  // start-screen wizard: pick goal → start-from (scratch / real songthaew) → difficulty → Start
+  const [selGoal, setSelGoal] = useState<GoalKind | null>(null);
+  const [buildSource, setBuildSource] = useState<"scratch" | "existing">("scratch");
+  const seedExistingRef = useRef(false); // seed the real Chiang Mai songthaew network once ready
   // save/load: autosave the network; offer "resume" on the start screen
   const [saved, setSaved] = useState<{ goal: GoalKind; difficulty?: Difficulty; stations: PlacedStation[]; lines: TransitLine[] } | null>(null);
   const restoreRef = useRef<{ stations: PlacedStation[]; lines: TransitLine[] } | null>(null);
@@ -127,6 +139,7 @@ export default function Page() {
   useEffect(() => {
     if (started && localStorage.getItem("cm-onboarded") !== "1") setShowCoach(true);
   }, [started]);
+
 
   // smooth traffic (EMA) so the grade/goal track the network's overall effect,
   // not the rush-hour spike; capture the no-network baseline for the Cars bar
@@ -160,6 +173,16 @@ export default function Page() {
       localStorage.setItem("cm-save-v1", JSON.stringify({ goal, difficulty, stations, lines }));
     } catch {}
   }, [started, goal, difficulty, stations, lines]);
+
+  // "Start from existing songthaew": once the worker is ready, lay down Chiang
+  // Mai's real red-truck corridors so the player improves a live network.
+  useEffect(() => {
+    if (ready && seedExistingRef.current) {
+      seedExistingRef.current = false;
+      for (const corr of CM_SONGTHAEW) sim.addLine(corr.points, "songthaew", corr.color);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
 
   // after a "Resume", re-apply the saved network once the worker is ready
   useEffect(() => {
@@ -204,9 +227,8 @@ export default function Page() {
     setSnapWarn(false);
     setTool("pan");
   };
-  // switch which mode the build tools build (metro ↔ songthaew); reset drafts
-  const switchBuild = (m: "metro" | "songthaew") => {
-    setBuildMode(m);
+  // reset drafts/selection when opening a build menu (metro ↔ songthaew)
+  const switchBuild = () => {
     setTool("pan");
     setChain([]);
     setRouteDraft([]);
@@ -318,7 +340,7 @@ export default function Page() {
       if (order) {
         const sts = resolve(order, stations);
         if (sts.length >= 2) {
-          sim.replaceLineFromStations(line.id, sts, line.color, line.fleet);
+          sim.replaceLineFromStations(line.id, sts, line.color, line.fleet, line.mode);
           extended = true;
           builtId = line.id;
         }
@@ -328,7 +350,7 @@ export default function Page() {
     if (!extended) {
       const chosen = resolve(ids, stations);
       if (chosen.length >= 2) {
-        const nl = sim.addLineFromStations(chosen, mode, LINE_COLORS[colorIdx].rgb);
+        const nl = sim.addLineFromStations(chosen, buildMode, LINE_COLORS[colorIdx].rgb);
         if (nl) builtId = nl.id;
       }
     }
@@ -352,7 +374,7 @@ export default function Page() {
       if (!line.stationIds || !line.stationIds.includes(id)) continue;
       const keptIds = line.stationIds.filter((x) => x !== id);
       const sts = resolve(keptIds, remaining);
-      if (sts.length >= 2) sim.replaceLineFromStations(line.id, sts, line.color, line.fleet);
+      if (sts.length >= 2) sim.replaceLineFromStations(line.id, sts, line.color, line.fleet, line.mode);
       else sim.removeLine(line.id);
     }
     setStations(remaining);
@@ -399,7 +421,7 @@ export default function Page() {
     return (
       <main className="relative h-full w-full">
         <div className="absolute inset-0 flex items-center justify-center lanna-bg">
-          <div className="panel panel-accent relative max-w-[560px] px-7 py-6">
+          <div className="panel panel-accent relative max-h-[94vh] max-w-[560px] overflow-y-auto px-7 py-6">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
                 <LannaEmblem size={34} />
@@ -427,53 +449,18 @@ export default function Page() {
               <b className="text-[var(--text)]">{t("Choose your goal:", "เลือกเป้าหมายของคุณ:")}</b>
             </p>
 
-            {/* difficulty selector (Free Build ignores it) */}
-            <div className="mt-3">
-              <div className="mb-1 text-[11px] text-[var(--muted)]">{t("Difficulty", "ระดับความยาก")}</div>
-              <div className="flex gap-1.5">
-                {(Object.keys(DIFFICULTIES) as Difficulty[]).map((dk) => {
-                  const dd = DIFFICULTIES[dk];
-                  const on = difficulty === dk;
-                  return (
-                    <button
-                      key={dk}
-                      className="btn flex-1 justify-center text-[12px]"
-                      onClick={() => {
-                        setDifficulty(dk);
-                        try { localStorage.setItem("cm-difficulty", dk); } catch {}
-                      }}
-                      style={on ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
-                      title={`${dd.label}: budget ×${dd.budgetMult}, cost ×${dd.costMult}, opex ×${dd.opexMult}, fare ×${dd.fareMult}${dd.bankruptcy ? ", bankruptcy ON" : ""}${dd.deadlineDays ? `, ${dd.deadlineDays}-day deadline` : ""}`}
-                    >
-                      {dd.icon} {t(dd.label, { easy: "ง่าย", medium: "ปานกลาง", challenge: "ท้าทาย", hard: "ยาก" }[dk])}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* per-run seed — different hot corridors + events each seed */}
-            <div className="mt-2 flex items-center gap-2 text-[11px]">
-              <span className="text-[var(--muted)]">{t("Seed", "ซีด")}</span>
-              <span className="rounded bg-[var(--fill-2)] px-2 py-0.5 font-mono text-[var(--text)]">{seed}</span>
-              <button
-                className="btn px-2 py-0.5 text-[11px]"
-                onClick={() => setSeed(Math.floor(Math.random() * 900000) + 100000)}
-                title={t("New seed — a different city build each run", "ซีดใหม่ — เมืองต่างออกไปทุกครั้ง")}
-              >
-                🎲 {t("re-roll", "สุ่มใหม่")}
-              </button>
-              <span className="text-[10px] text-[var(--muted)]">{t("varies demand + events", "เปลี่ยนความต้องการ + เหตุการณ์")}</span>
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            {/* 1 · choose a goal (select; build it with the Start button below) */}
+            <div className="mt-3 text-[11px] font-semibold text-[var(--muted)]">{t("1 · Goal", "1 · เป้าหมาย")}</div>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
               {(Object.keys(GOALS) as GoalKind[]).map((g) => {
                 const m = GOALS[g];
+                const on = selGoal === g;
                 return (
                   <button
                     key={g}
-                    className="flex flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--fill)] px-3 py-3 text-left transition-colors hover:border-[var(--gold)] hover:bg-[var(--paper)] disabled:opacity-50"
-                    onClick={() => sim.startGame(g, difficulty, seed)}
+                    className="flex flex-col gap-1 rounded-xl border bg-[var(--fill)] px-3 py-2.5 text-left transition-colors hover:border-[var(--gold)] hover:bg-[var(--paper)] disabled:opacity-50"
+                    style={{ borderColor: on ? "var(--gold)" : "var(--border)", background: on ? "var(--paper)" : undefined, boxShadow: on ? "0 0 0 1px var(--gold)" : undefined }}
+                    onClick={() => setSelGoal(g)}
                     disabled={!loaded}
                   >
                     <span className="text-[13px] font-semibold">
@@ -485,10 +472,71 @@ export default function Page() {
                 );
               })}
             </div>
+
+            {/* 2 · start from a blank city OR Chiang Mai's real songthaew network */}
+            <div className="mt-3 text-[11px] font-semibold text-[var(--muted)]">{t("2 · Start from", "2 · เริ่มจาก")}</div>
+            <div className="mt-1.5 grid grid-cols-2 gap-2">
+              {([
+                { id: "scratch", icon: "🆕", en: "Build from scratch", th: "สร้างใหม่ทั้งหมด", dEn: "An empty city — design the whole network yourself.", dTh: "เมืองเปล่า — ออกแบบเครือข่ายเองทั้งหมด" },
+                { id: "existing", icon: "🛻", en: "Existing songthaew net", th: "ระบบสองแถวที่มีอยู่", dEn: "Inherit Chiang Mai's real red-truck network — already overwhelmed (~Grade C). Modernise it with metro to reach an A.", dTh: "รับช่วงเครือข่ายรถแดงจริงของเชียงใหม่ — แออัดอยู่แล้ว (~เกรด C) ยกระดับด้วยรถไฟฟ้าเพื่อไปให้ถึง A" },
+              ] as const).map((s) => {
+                const on = buildSource === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    className="flex flex-col gap-0.5 rounded-xl border bg-[var(--fill)] px-3 py-2.5 text-left transition-colors hover:border-[var(--gold)] hover:bg-[var(--paper)]"
+                    style={{ borderColor: on ? "var(--gold)" : "var(--border)", background: on ? "var(--paper)" : undefined, boxShadow: on ? "0 0 0 1px var(--gold)" : undefined }}
+                    onClick={() => setBuildSource(s.id)}
+                  >
+                    <span className="text-[12.5px] font-semibold">{s.icon} {t(s.en, s.th)}</span>
+                    <span className="text-[10px] leading-snug text-[var(--muted)]">{t(s.dEn, s.dTh)}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 3 · difficulty (Free Build ignores it; run seed is now hidden + auto) */}
+            <div className="mt-3 text-[11px] font-semibold text-[var(--muted)]">{t("3 · Difficulty", "3 · ระดับความยาก")}</div>
+            <div className="mt-1.5 flex gap-1.5">
+              {(Object.keys(DIFFICULTIES) as Difficulty[]).map((dk) => {
+                const dd = DIFFICULTIES[dk];
+                const on = difficulty === dk;
+                return (
+                  <button
+                    key={dk}
+                    className="btn flex-1 justify-center text-[12px]"
+                    onClick={() => {
+                      setDifficulty(dk);
+                      try { localStorage.setItem("cm-difficulty", dk); } catch {}
+                    }}
+                    style={on ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
+                    title={`${dd.label}: budget ×${dd.budgetMult}, cost ×${dd.costMult}, opex ×${dd.opexMult}, fare ×${dd.fareMult}${dd.bankruptcy ? ", bankruptcy ON" : ""}${dd.deadlineDays ? `, ${dd.deadlineDays}-day deadline` : ""}`}
+                  >
+                    {dd.icon} {t(dd.label, { easy: "ง่าย", medium: "ปานกลาง", challenge: "ท้าทาย", hard: "ยาก" }[dk])}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* start — the dice/seed runs automatically behind the scenes */}
+            <button
+              className="btn btn-accent mt-4 w-full justify-center py-2.5 text-[14px] font-semibold disabled:opacity-50"
+              disabled={!loaded || !selGoal}
+              onClick={() => {
+                if (!selGoal) return;
+                seedExistingRef.current = buildSource === "existing";
+                setShowIntro(true);
+                sim.startGame(selGoal, difficulty, seed);
+              }}
+            >
+              {loaded ? (selGoal ? t("▶ Start building", "▶ เริ่มสร้างเมือง") : t("Pick a goal first", "เลือกเป้าหมายก่อน")) : t("Loading…", "กำลังโหลด…")}
+            </button>
+
             {saved && (saved.lines?.length || saved.stations?.length) ? (
               <button
                 className="mt-2 w-full rounded-xl border border-[var(--gold)] bg-[var(--fill)] px-3 py-2 text-left text-[12px] transition-colors hover:bg-[var(--paper)] disabled:opacity-50"
                 onClick={() => {
+                  seedExistingRef.current = false;
                   restoreRef.current = { stations: saved.stations || [], lines: saved.lines || [] };
                   const dm = saved.difficulty ?? "medium";
                   setDifficulty(dm);
@@ -505,7 +553,7 @@ export default function Page() {
             ) : null}
             <div className="mt-3 text-center text-[11px] text-[var(--muted)]">
               {loaded
-                ? t("Pick a goal to begin.", "เลือกเป้าหมายเพื่อเริ่ม")
+                ? t("Goal → start-from → difficulty → Start.", "เป้าหมาย → เริ่มจาก → ความยาก → เริ่ม")
                 : t("Loading Chiang Mai street network…", "กำลังโหลดแผนที่เชียงใหม่…")}
             </div>
           </div>
@@ -647,8 +695,9 @@ export default function Page() {
         selectedLineId={selectedLineId}
         onSelectLine={(id) => setSelectedLineId((cur) => (cur === id ? null : id))}
         center={CENTER}
-        showDensity={showDensity}
+        showDensity={false}
         showAgents={showAgents}
+        showCoverage={showCoverage}
         zones={sim.zones}
         pois={sim.pois}
         simTime={meta?.simTime ?? 0}
@@ -851,7 +900,7 @@ export default function Page() {
         </div>
 
         {/* Your network (hidden in Zen mode) */}
-        {!zen && lines.length > 0 && (
+        {lines.length > 0 && (
           <div className="panel mt-2 px-3 py-2.5">
             <div className="mb-1.5 flex items-center justify-between text-[11.5px] text-[var(--muted)]">
               <span>{t("YOUR NETWORK", "เครือข่ายของคุณ")} · {lines.length}</span>
@@ -934,8 +983,8 @@ export default function Page() {
         )}
       </div>
 
-      {/* Stats (hidden in Zen mode) */}
-      {!zen && (
+      {/* Stats */}
+      {(
       <div className="absolute right-2 top-2 z-20 max-h-[44vh] w-[45vw] overflow-y-auto sm:right-4 sm:top-4 sm:max-h-none sm:w-[224px] sm:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="panel px-4 py-3 text-[13px]">
           <Stat label={t("Travellers", "ผู้คน")} value={meta ? ppl(meta.agentCount) : "…"} />
@@ -1096,119 +1145,77 @@ export default function Page() {
         );
       })()}
 
-      {/* Bottom controls — Bangkok-style tool palette. On phones it's a single
-          swipeable strip (flex-nowrap + scroll); on ≥sm it wraps and centers. */}
-      <div className="panel absolute bottom-3 left-1/2 z-20 flex max-w-[96vw] -translate-x-1/2 flex-nowrap items-center justify-start gap-2 overflow-x-auto px-3 py-2.5 sm:bottom-12 sm:flex-wrap sm:justify-center sm:overflow-x-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <button className="btn" onClick={() => (playing ? sim.pause() : sim.play())} disabled={!ready}>
-          {playing ? "⏸" : "▶"}
-        </button>
-        {/* time speed — segmented (pick one), neutral selected segment (not gold) */}
-        <div className="segmented" role="group" aria-label={t("Speed", "ความเร็ว")}>
-          {SPEEDS.map((s) => (
-            <button key={s} className={`seg ${speed === s ? "seg-on" : ""}`} onClick={() => sim.setSpeed(s)} disabled={!ready}>
-              {s}×
-            </button>
-          ))}
-        </div>
-        <div className="mx-1 h-7 w-px bg-[var(--line)]" />
+      {/* Bottom-center controls — 4 primary buttons (Speed · Metro · Songthaew ·
+          Pan); each opens its sub-features in a popover ABOVE the bar. People /
+          Demand / Sound now live under the advisor dock (bottom-right). */}
+      <div className="absolute bottom-3 left-1/2 z-20 flex max-w-[96vw] -translate-x-1/2 flex-col items-center gap-2 sm:bottom-8">
 
-        {/* build-mode: 🚆 Metro trunk vs 🛻 Songthaew feeders — segmented (pick one) */}
-        <div className="segmented" role="group" aria-label={t("Build mode", "โหมดสร้าง")}>
-          {(["metro", "songthaew"] as const).map((m) => (
-            <button
-              key={m}
-              className={`seg ${buildMode === m ? "seg-on" : ""}`}
-              onClick={() => switchBuild(m)}
+        {/* ⏩ speed gauge (1×–1000×) */}
+        {openMenu === "speed" && (
+          <div className="panel flex items-center gap-3 px-4 py-2.5">
+            <button className="btn" onClick={() => (playing ? sim.pause() : sim.play())} disabled={!ready} title={playing ? t("Pause", "หยุด") : t("Play", "เล่น")}>
+              {playing ? "⏸" : "▶"}
+            </button>
+            <input
+              type="range" min={1} max={1000} step={1} value={Math.min(1000, Math.max(1, speed))}
+              onChange={(e) => sim.setSpeed(Number(e.target.value))}
               disabled={!ready}
-              title={m === "metro"
-                ? "Metro — fast, traffic-immune trunk lines (place stations → lay track)"
-                : "Songthaew — cheap road-bound feeders; draw a route along the streets"}
-            >
-              {m === "metro" ? "🚆" : "🛻"} {m === "metro" ? t("Metro", "รถไฟฟ้า") : t("Songthaew", "สองแถว")}
-            </button>
-          ))}
-        </div>
-        <div className="mx-1 h-7 w-px bg-[var(--line)]" />
+              className="w-40 sm:w-56"
+              style={{ accentColor: "var(--gold)" }}
+              aria-label={t("Speed", "ความเร็ว")}
+            />
+            <span className="w-14 shrink-0 text-right font-mono text-[13px] font-semibold tabular-nums">{speed}×</span>
+            <div className="segmented">
+              {SPEEDS.map((s) => (
+                <button key={s} className={`seg ${speed === s ? "seg-on" : ""}`} onClick={() => sim.setSpeed(s)} disabled={!ready}>
+                  {s}×
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-        {/* tools — metro: pan/station/track/demolish · songthaew: pan/route */}
-        <div className="flex items-center gap-1">
-          {(buildMode === "metro" ? TOOLS : [TOOLS[0], ROUTE_TOOL, TOOLS[3]]).map((tl) => {
-            const on = tool === tl.id;
-            const locked =
-              (tl.id === "track" && stations.length < 2) ||
-              (tl.id === "demolish" && stations.length === 0 && lines.length === 0);
-            return (
-              <button
-                key={tl.id}
-                className="btn flex items-center gap-1"
-                onClick={() => pickTool(tl.id)}
-                disabled={!ready || locked}
-                style={on ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
-                title={locked ? t("Place 2+ stations first (🚉)", "วางสถานีอย่างน้อย 2 จุดก่อน (🚉)") : `${t(tl.en, tl.th)} — ${tl.hint}`}
-              >
-                <span>{tl.icon}</span>
-                <span className="text-[11px]">{t(tl.en, tl.th)}</span>
-              </button>
-            );
-          })}
-        </div>
-        <button
-          className="btn"
-          onClick={undo}
-          disabled={!undoStack.length}
-          title="Undo (Ctrl/Cmd+Z)"
-        >
-          ↶
-        </button>
-        <div className="mx-1 h-7 w-px bg-[var(--line)]" />
-        {/* view toggles — on/off switches for map overlays (jade when on, never gold) */}
-        <button
-          className={`vtoggle ${showDensity ? "vtoggle-on" : ""}`}
-          aria-pressed={showDensity}
-          onClick={() => setShowDensity((v) => !v)}
-          title={t(
-            "Population density heat — where residents, students & tourists are (plan with it on, build with it off)",
-            "ความหนาแน่นประชากร — ที่อยู่ของคนเมือง นักศึกษา นักท่องเที่ยว (เปิดดูตอนวางแผน ปิดตอนสร้าง)",
-          )}
-        >
-          🔥 {t("Density", "ความหนาแน่น")}
-        </button>
-        <button
-          className={`vtoggle ${showAgents ? "vtoggle-on" : ""}`}
-          aria-pressed={showAgents}
-          onClick={() => setShowAgents((v) => !v)}
-          title={t("Show/hide the moving people (walk · drive · ride)", "แสดง/ซ่อนผู้คนที่กำลังเดินทาง (เดิน · ขับรถ · นั่งรถไฟ)")}
-        >
-          👣 {t("People", "ผู้คน")}
-        </button>
-        <button
-          className={`vtoggle ${showOD ? "vtoggle-on" : ""}`}
-          aria-pressed={showOD}
-          onClick={() => setShowOD((v) => !v)}
-          title={t("Show/hide the travel-demand priorities panel", "แสดง/ซ่อนแผงความต้องการเดินทาง")}
-        >
-          🎯 {t("Demand", "ความต้องการ")}
-        </button>
-        <button
-          className={`vtoggle ${zen ? "vtoggle-on" : ""}`}
-          aria-pressed={zen}
-          onClick={() => setZen((v) => !v)}
-          title={t("Zen mode — collapse to map + grade + tools; summon panels when you want them", "โหมดเซน — เหลือแผนที่ เกรด เครื่องมือ")}
-        >
-          🌿 {t("Zen", "เซน")}
-        </button>
-        <button
-          className="btn"
-          onClick={() => setMuted((m) => { const n = !m; setSfxMuted(n); return n; })}
-          title={t("Sound on/off", "เสียง เปิด/ปิด")}
-        >
-          {muted ? "🔇" : "🔊"}
-        </button>
+        {/* 🚆 metro tools (place stations → connect → demolish) */}
+        {openMenu === "metro" && (
+          <div className="panel flex flex-wrap items-center justify-center gap-1.5 px-3 py-2">
+            <span className="mr-0.5 text-[11px] font-semibold" style={{ color: rgb(MODE_PARAMS.metro.color) }}>🚆 {t("Metro", "รถไฟฟ้า")}</span>
+            {[TOOLS[1], TOOLS[2], TOOLS[3]].map((tl) => {
+              const on = tool === tl.id;
+              const locked = (tl.id === "track" && stations.length < 2) || (tl.id === "demolish" && stations.length === 0 && lines.length === 0);
+              return (
+                <button key={tl.id} className="btn flex items-center gap-1" onClick={() => pickTool(tl.id)} disabled={!ready || locked}
+                  style={on ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
+                  title={locked ? t("Place 2+ stations first (🚉)", "วางสถานีอย่างน้อย 2 จุดก่อน (🚉)") : `${t(tl.en, tl.th)} — ${tl.hint}`}>
+                  <span>{tl.icon}</span><span className="text-[11px]">{t(tl.en, tl.th)}</span>
+                </button>
+              );
+            })}
+            <button className="btn" onClick={undo} disabled={!undoStack.length} title="Undo (Ctrl/Cmd+Z)">↶</button>
+          </div>
+        )}
+
+        {/* 🛻 songthaew tools — place+connect stations OR draw a free route */}
+        {openMenu === "songthaew" && (
+          <div className="panel flex flex-wrap items-center justify-center gap-1.5 px-3 py-2">
+            <span className="mr-0.5 text-[11px] font-semibold" style={{ color: rgb(MODE_PARAMS.songthaew.color) }}>🛻 {t("Songthaew", "สองแถว")}</span>
+            {[TOOLS[1], TOOLS[2], ROUTE_TOOL, TOOLS[3]].map((tl) => {
+              const on = tool === tl.id;
+              const locked = (tl.id === "track" && stations.length < 2) || (tl.id === "demolish" && stations.length === 0 && lines.length === 0);
+              return (
+                <button key={tl.id} className="btn flex items-center gap-1" onClick={() => pickTool(tl.id)} disabled={!ready || locked}
+                  style={on ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
+                  title={locked ? t("Place 2+ stations first (🚉)", "วางสถานีอย่างน้อย 2 จุดก่อน (🚉)") : `${t(tl.en, tl.th)} — ${tl.hint}`}>
+                  <span>{tl.icon}</span><span className="text-[11px]">{t(tl.en, tl.th)}</span>
+                </button>
+              );
+            })}
+            <button className="btn" onClick={undo} disabled={!undoStack.length} title="Undo (Ctrl/Cmd+Z)">↶</button>
+          </div>
+        )}
 
         {/* 🚉 place stations — click roads to drop standalone stations (no rail yet) */}
         {tool === "station" && (
-          <>
-            <div className="mx-1 h-7 w-px bg-[var(--line)]" />
+          <div className="panel flex flex-col items-center gap-1 px-3 py-2">
             <span className="px-1 text-[11px]">
               {snapWarn ? (
                 <span className="text-[var(--accent)]">{t("✦ Tap on a street", "✦ แตะบนถนน")}</span>
@@ -1221,19 +1228,30 @@ export default function Page() {
                 </span>
               )}
             </span>
-          </>
+            {/* coverage note — mode-aware: metro = wide walk-shed, songthaew = tiny local hail */}
+            <span className="text-[10px] text-[var(--muted)]">
+              📐 {buildMode === "metro"
+                ? t(
+                    `Metro stations cover a ~${MODE_PARAMS.metro.walkAccessM} m walk-shed (~10 min). Toggle 📐 Coverage (under the team) to see it.`,
+                    `สถานีรถไฟฟ้าครอบคลุมรัศมีเดิน ~${MODE_PARAMS.metro.walkAccessM} ม. (~10 นาที) · เปิด 📐 ความครอบคลุม (ใต้ทีมงาน) เพื่อดู`,
+                  )
+                : t(
+                    `Songthaew stops cover only a ~${MODE_PARAMS.songthaew.walkAccessM} m local hail — you ride it near home. Space stops close. Toggle 📐 Coverage to see it.`,
+                    `จุดสองแถวครอบคลุมแค่ละแวกเล็ก ~${MODE_PARAMS.songthaew.walkAccessM} ม. (ขึ้นใกล้บ้าน) วางจุดถี่ๆ · เปิด 📐 ความครอบคลุม เพื่อดู`,
+                  )}
+            </span>
+          </div>
         )}
 
         {/* 🛤️ lay track — connect placed stations into a metro line */}
         {tool === "track" && (
-          <>
-            <div className="mx-1 h-7 w-px bg-[var(--line)]" />
+          <div className="panel flex flex-wrap items-center justify-center gap-2 px-3 py-2">
             <span
               className="btn"
-              style={{ background: rgb(MODE_PARAMS.metro.color), color: "var(--accent-ink)", borderColor: "transparent", cursor: "default" }}
-              title={`Metro: from ฿${(ECONOMY.metro.build / 1e6).toFixed(1)}M, ${Math.round(MODE_PARAMS.metro.speed * 3.6)} km/h, cap ${MODE_PARAMS.metro.capacity}, fare ฿${MODE_PARAMS.metro.fare}`}
+              style={{ background: rgb(MODE_PARAMS[buildMode].color), color: buildMode === "metro" ? "var(--accent-ink)" : "#fff", borderColor: "transparent", cursor: "default" }}
+              title={`${MODE_PARAMS[buildMode].label}: ${Math.round(MODE_PARAMS[buildMode].speed * 3.6)} km/h, cap ${MODE_PARAMS[buildMode].capacity}, fare ฿${MODE_PARAMS[buildMode].fare}`}
             >
-              🚆 Metro
+              {buildMode === "metro" ? "🚆 Metro" : "🛻 Songthaew"}
             </span>
             <span className="flex items-center gap-1">
               {LINE_COLORS.map((c, i) => (
@@ -1263,17 +1281,16 @@ export default function Page() {
             <button className="btn" onClick={cancelDraw}>
               Cancel
             </button>
-          </>
+          </div>
         )}
 
         {tool === "demolish" && (
-          <span className="px-1 text-[11px] text-[var(--muted)]">{t("Click a station (line re-routes) or a line/route to remove it", "คลิกสถานี (สายจะปรับเส้นทาง) หรือคลิกสาย/เส้นทางเพื่อรื้อถอน")}</span>
+          <div className="panel px-3 py-2"><span className="text-[11px] text-[var(--muted)]">{t("Click a station (line re-routes) or a line/route to remove it", "คลิกสถานี (สายจะปรับเส้นทาง) หรือคลิกสาย/เส้นทางเพื่อรื้อถอน")}</span></div>
         )}
 
         {/* 🛻 draw a songthaew route — click waypoints along the roads, then Finish */}
         {tool === "route" && (
-          <>
-            <div className="mx-1 h-7 w-px bg-[var(--line)]" />
+          <div className="panel flex flex-wrap items-center justify-center gap-2 px-3 py-2">
             <span
               className="btn"
               style={{ background: rgb(MODE_PARAMS.songthaew.color), color: "#fff", borderColor: "transparent", cursor: "default" }}
@@ -1304,13 +1321,12 @@ export default function Page() {
             <button className="btn" onClick={cancelRoute}>
               Cancel
             </button>
-          </>
+          </div>
         )}
 
-        {/* ▶ selected-line edit strip — click a line, then add vehicles / set fare / recolor / remove, all down here */}
+        {/* ▶ selected-line edit strip — click a line, then add vehicles / set fare / recolor / remove */}
         {selLine && tool !== "track" && tool !== "route" && tool !== "station" && (
-          <>
-            <div className="mx-1 h-7 w-px bg-[var(--line)]" />
+          <div className="panel flex flex-wrap items-center justify-center gap-2 px-3 py-2">
             <span
               className="inline-flex h-3 w-3 shrink-0 rounded-full"
               style={{ background: rgb(selLine.color) }}
@@ -1362,20 +1378,50 @@ export default function Page() {
               🗑️ {t("Remove", "รื้อถอน")}
             </button>
             <button className="btn" onClick={() => setSelectedLineId(null)} title={t("Close", "ปิด")}>✕</button>
-          </>
+          </div>
         )}
-      </div>
 
-      {/* 🔥 density legend (only while the heat overlay is on) */}
-      {showDensity && (
-        <div className="panel absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-2 px-3 py-1.5 text-[11px]">
-          🔥 <span className="font-medium">{t("Population density", "ความหนาแน่นประชากร")}</span>
-          <span className="text-[var(--muted)]">{t("quiet", "น้อย")}</span>
-          <span className="inline-block h-2.5 w-20 rounded" style={{ background: "linear-gradient(90deg,#f3d68e,#d89634,#c26a2a,#b5462e)" }} />
-          <span className="text-[var(--muted)]">{t("dense", "หนาแน่น")}</span>
-          {meta && <span className="ml-1 text-[10px] text-[var(--muted)]">· {t("now", "ตอนนี้")} {peakBadge}</span>}
+        {/* ── the 4 primary buttons ───────────────────────────────────────── */}
+        <div className="panel flex flex-nowrap items-center gap-2 overflow-x-auto px-3 py-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <button
+            className="btn flex items-center gap-1.5"
+            onClick={() => setOpenMenu((m) => (m === "speed" ? null : "speed"))}
+            disabled={!ready}
+            style={openMenu === "speed" ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
+            title={t("Speed — set how fast time runs (1×–1000×)", "ความเร็ว — ปรับความเร็วเวลา (1×–1000×)")}
+          >
+            ⏩ <span className="text-[12px]">{t("Speed", "ความเร็ว")}</span>
+            <span className="font-mono text-[11px] opacity-80">{speed}×</span>
+          </button>
+          <button
+            className="btn flex items-center gap-1.5"
+            onClick={() => { switchBuild(); setBuildMode("metro"); setOpenMenu((m) => (m === "metro" ? null : "metro")); }}
+            disabled={!ready}
+            style={openMenu === "metro" ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
+            title={t("Metro — fast, traffic-immune trunk lines", "รถไฟฟ้า — สายหลักเร็ว ไม่ติดรถ")}
+          >
+            🚆 <span className="text-[12px]">{t("Metro", "รถไฟฟ้า")}</span>
+          </button>
+          <button
+            className="btn flex items-center gap-1.5"
+            onClick={() => { switchBuild(); setBuildMode("songthaew"); setOpenMenu((m) => (m === "songthaew" ? null : "songthaew")); }}
+            disabled={!ready}
+            style={openMenu === "songthaew" ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
+            title={t("Songthaew — cheap road-bound feeders", "สองแถว — สายรองราคาถูก วิ่งบนถนน")}
+          >
+            🛻 <span className="text-[12px]">{t("Songthaew", "สองแถว")}</span>
+          </button>
+          <button
+            className="btn flex items-center gap-1.5"
+            onClick={() => { pickTool("pan"); setOpenMenu(null); }}
+            disabled={!ready}
+            style={tool === "pan" && !openMenu ? { background: "var(--accent)", color: "var(--accent-ink)", borderColor: "transparent" } : undefined}
+            title={t("Move the map around", "เลื่อนแผนที่ไปมา")}
+          >
+            🖐️ <span className="text-[12px]">{t("Pan", "เลื่อนแผนที่")}</span>
+          </button>
         </div>
-      )}
+      </div>
 
       {/* News ticker */}
       {sim.ticker.length > 0 && (
@@ -1421,6 +1467,33 @@ export default function Page() {
           </div>
         </div>
       )}
+
+      {/* 🏛️ governor appointment cutscene — your team of 4 advisors */}
+      {showIntro && (
+        <AdvisorIntro
+          lang={lang}
+          goalLabel={goal ? t(goalDef?.label ?? "Free Build", goalTh[goal].label) : undefined}
+          onDone={() => setShowIntro(false)}
+        />
+      )}
+
+      {/* 👥 persistent advisor dock (bottom-right) — the main advisory UI: all 4
+          faces always visible; click a face for that advisor's live advice.
+          People / Demand / Sound toggles are parked under the team. */}
+      <AdvisorDock
+        lang={lang}
+        meta={meta}
+        lines={lines}
+        flashDay={meta?.day}
+        showAgents={showAgents}
+        onToggleAgents={() => setShowAgents((v) => !v)}
+        showOD={showOD}
+        onToggleOD={() => setShowOD((v) => !v)}
+        showCoverage={showCoverage}
+        onToggleCoverage={() => setShowCoverage((v) => !v)}
+        muted={muted}
+        onToggleMuted={() => setMuted((m) => { const n = !m; setSfxMuted(n); return n; })}
+      />
 
       {/* 🏆 win overlay */}
       {showWin && goalDef && (

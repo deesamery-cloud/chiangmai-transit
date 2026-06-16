@@ -82,6 +82,12 @@ export const OD = {
   topUnmet: 20, // unmet corridors surfaced to the player
   topMet: 12, // met corridors surfaced (achievements)
   scaleTop: 5400, // scale the top corridor to ~this for a readable "trips/day"
+  // Songthaew is a slow, tiny, road-bound FEEDER — not rapid transit. A corridor
+  // served only by songthaew counts for just this fraction of "served demand" and
+  // still shows as a red "build metro here" priority, so a cheap songthaew web (eg.
+  // the real existing network you can start from) scores low and you must add metro
+  // to reach a high grade. Metro-served corridors get full (1.0) credit.
+  songthaewServeCredit: 0.3,
 } as const;
 
 // --- Light events + economy --------------------------------------------------
@@ -134,6 +140,7 @@ export interface ModeParams {
   gradeSeparated: boolean; // follows roads but immune to traffic (metro)
   flexible: boolean;
   stopSpacingM: number;
+  walkAccessM: number; // how far people walk to reach a stop of this mode (its catchment)
 }
 
 // Two clearly-contrasted, COMPLEMENTARY modes:
@@ -154,6 +161,7 @@ export const MODE_PARAMS: Record<LineMode, ModeParams> = {
     gradeSeparated: true, // follows the road corridor but elevated/underground
     flexible: false,
     stopSpacingM: 900, // stations spaced wider
+    walkAccessM: 800, // people walk ~10 min to a rapid-transit station (wide TOD catchment)
   },
   songthaew: {
     label: "Songthaew",
@@ -166,6 +174,7 @@ export const MODE_PARAMS: Record<LineMode, ModeParams> = {
     gradeSeparated: false, // shares the road: slows in & adds to traffic
     flexible: true, // hail/alight along the corridor (approximated by dense stops)
     stopSpacingM: 320, // frequent hail points — strong walk-up coverage
+    walkAccessM: 200, // you hail a rod daeng near home — a SMALL local catchment, far less than metro
   },
 };
 

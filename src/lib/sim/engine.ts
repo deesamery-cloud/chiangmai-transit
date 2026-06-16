@@ -12,7 +12,7 @@ import type {
   TransitLine,
   ZoneData,
 } from "@/lib/types";
-import { type AgentKind, DEBT_INTEREST_PER_DAY, DEMOGRAPHICS, ECONOMY, EVENT_EVERY_DAYS, EVENTS, GOAL, OD, SIM, TRAVEL } from "@/lib/config";
+import { type AgentKind, DEBT_INTEREST_PER_DAY, DEMOGRAPHICS, ECONOMY, EVENT_EVERY_DAYS, EVENTS, GOAL, MODE_PARAMS, OD, SIM, TRAVEL } from "@/lib/config";
 
 const KINDS: AgentKind[] = ["resident", "student", "tourist"];
 
@@ -524,8 +524,13 @@ export class SimEngine {
 
   /** A zone is "covered" if any stop is within walking distance of it. */
   private computeCoverage(): void {
-    const stops: { lon: number; lat: number }[] = [];
-    for (const rt of this.lines) for (const s of rt.line.stops) stops.push(s);
+    // each stop covers only its MODE's walk catchment — songthaew is a small local
+    // hail (~200 m), metro a wide TOD walk-shed (~800 m) — so coverage is realistic.
+    const stops: { lon: number; lat: number; access: number }[] = [];
+    for (const rt of this.lines) {
+      const access = MODE_PARAMS[rt.line.mode].walkAccessM;
+      for (const s of rt.line.stops) stops.push({ lon: s.lon, lat: s.lat, access });
+    }
 
     let coveredProd = 0;
     let total = 0;
@@ -537,7 +542,7 @@ export class SimEngine {
       const zl = this.zoneLon[i];
       const zt = this.zoneLat[i];
       for (let s = 0; s < stops.length; s++) {
-        if (haversine(zl, zt, stops[s].lon, stops[s].lat) <= SIM.maxAccessWalkM) {
+        if (haversine(zl, zt, stops[s].lon, stops[s].lat) <= stops[s].access) {
           covered = true;
           break;
         }
@@ -697,13 +702,17 @@ export class SimEngine {
       const dwell = Math.abs(to - from) * line.dwellSec;
       return (ride + dwell + line.headwaySec / 2) / 60;
     };
+    // how far someone will walk to reach a stop depends on the MODE: a songthaew is
+    // hailed near home (small catchment), a metro station draws from much further.
+    const accFor = (line: TransitLine): number => Math.min(access, MODE_PARAMS[line.mode].walkAccessM);
     // direct (single line)
     for (let i = 0; i < this.lines.length; i++) {
       const line = this.lines[i].line;
       if (line.stops.length < 2) continue;
       const b = boardInfo[i];
       const al = alightInfo[i];
-      if (b.idx < 0 || al.idx < 0 || b.idx === al.idx || b.dist > access || al.dist > access) continue;
+      const acc = accFor(line);
+      if (b.idx < 0 || al.idx < 0 || b.idx === al.idx || b.dist > acc || al.dist > acc) continue;
       const cost =
         b.dist / SIM.walkSpeed / 60 + inVehMin(line, b.idx, al.idx) + al.dist / SIM.walkSpeed / 60 + line.fare * fareMin;
       if (cost < bestCost) { bestCost = cost; bestLegs = [{ rt: this.lines[i], board: b.idx, alight: al.idx }]; }
@@ -711,13 +720,13 @@ export class SimEngine {
     // one transfer
     for (let i = 0; i < this.lines.length; i++) {
       const bA = boardInfo[i];
-      if (bA.idx < 0 || bA.dist > access) continue;
       const A = this.lines[i].line;
+      if (bA.idx < 0 || bA.dist > accFor(A)) continue;
       for (let j = 0; j < this.lines.length; j++) {
         if (i === j) continue;
         const alB = alightInfo[j];
-        if (alB.idx < 0 || alB.dist > access) continue;
         const B = this.lines[j].line;
+        if (alB.idx < 0 || alB.dist > accFor(B)) continue;
         const tr = this.transfers.get(`${A.id}|${B.id}`);
         if (!tr || bA.idx === tr.aIdx || tr.bIdx === alB.idx) continue;
         const cost =
@@ -753,10 +762,17 @@ export class SimEngine {
       const demand = p.base * jit * peak;
       const driveCost = (p.dist * 1.3) / driveSpeed / 60 + TRAVEL.parkPenaltyMin;
       const O = this.odO[p.o], D = this.odD[p.d];
-      const { cost } = this.bestTransitJourney(O.lon, O.lat, D.lon, D.lat, OD.accessM);
-      const met = isFinite(cost) && cost <= driveCost * TRAVEL.transitPref;
+      const { cost, legs } = this.bestTransitJourney(O.lon, O.lat, D.lon, D.lat, OD.accessM);
+      const within = isFinite(cost) && cost <= driveCost * TRAVEL.transitPref;
+      // a corridor is properly "served" (green / full grade credit) only if the
+      // best journey uses METRO — rapid transit. Songthaew-only journeys are a
+      // slow feeder: partial credit, and still flagged red "build metro here".
+      const hasMetro = !!legs && legs.some((l) => l.rt.line.mode === "metro");
+      const met = within && hasMetro;
+      const quality = !within ? 0 : hasMetro ? 1 : OD.songthaewServeCredit;
       allSum += demand;
-      if (met) { metSum += demand; metCount++; }
+      metSum += demand * quality;
+      if (met) metCount++;
       corr.push({
         oName: O.name, dName: D.name, oLon: O.lon, oLat: O.lat, dLon: D.lon, dLat: D.lat,
         demand: Math.round(demand * this.odScale), met,
