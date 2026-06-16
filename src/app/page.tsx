@@ -26,6 +26,7 @@ import {
 import { playSfx, setSfxMuted } from "@/lib/sfx";
 import { AdvisorIntro, AdvisorDock } from "@/components/advisors/AdvisorPanels";
 import { CM_SONGTHAEW } from "@/lib/cm-songthaew";
+import { OpeningCinematic } from "@/components/cinematic/OpeningCinematic";
 
 const MapCanvas = dynamic(() => import("@/components/map/MapCanvas"), { ssr: false });
 
@@ -103,6 +104,7 @@ export default function Page() {
   // game, then a persistent bottom-right dock — all 4 faces always visible, click
   // a face for that advisor's live advice (the team is the main advisory UI)
   const [showIntro, setShowIntro] = useState(false); // governor appointment cutscene
+  const [showCinematic, setShowCinematic] = useState(true); // ~60s opening cinematic — plays every time you enter the game (skippable)
   const [lang, setLang] = useState<"en" | "th">("en"); // TH/EN toggle
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   // start-screen wizard: pick goal → start-from (scratch / real songthaew) → difficulty → Start
@@ -163,6 +165,9 @@ export default function Page() {
       if (l === "th" || l === "en") setLang(l);
       const dm = localStorage.getItem("cm-difficulty");
       if (dm && dm in DIFFICULTIES) setDifficulty(dm as Difficulty);
+      // the opening cinematic plays EVERY time the game is entered (skippable);
+      // `cm-cine-skip` is a test/dev escape hatch to suppress it (never set in normal play)
+      if (localStorage.getItem("cm-cine-skip") === "1") setShowCinematic(false);
     } catch {}
   }, []);
 
@@ -419,28 +424,42 @@ export default function Page() {
   // --- mode-select screen --------------------------------------------------
   if (!started) {
     return (
-      <main className="relative h-full w-full">
-        <div className="absolute inset-0 flex items-center justify-center lanna-bg">
-          <div className="panel panel-accent relative max-h-[94vh] max-w-[560px] overflow-y-auto px-7 py-6">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <LannaEmblem size={34} />
-                <div>
-                  <div className="wordmark text-[25px] leading-[1.3]">
-                    เชียงใหม่ <span style={{ color: "var(--gold-deep)" }}>Transit</span>
-                  </div>
-                  {/* tracking only on the Latin run — letter-spacing mangles Thai (ผังเมือง…) */}
-                  <div className="mt-1 text-[10px] text-[var(--muted)]">
-                    <span className="uppercase tracking-[0.24em]">Chiang Mai</span>
-                    <span> · ผังเมืองรถไฟฟ้า</span>
-                  </div>
-                </div>
-              </div>
-              <button className="btn px-2 py-1 text-[11px]" onClick={toggleLang} title="ภาษา / Language">
-                🌐 {lang === "en" ? "EN" : "ไทย"}
-              </button>
+      <main className="relative h-full w-full overflow-hidden">
+        {/* cinematic photo backdrop (the cinematic's final dusk title scene, so the
+            hand-off from "Begin your term" is seamless) + warm dark scrim */}
+        <div className="absolute inset-0 z-0" style={{ background: "var(--bg-2)" }}>
+          <div className="cm-bg-drift absolute inset-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/cinematic/6.jpg"
+              alt=""
+              className="h-full w-full object-cover"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              draggable={false}
+            />
+          </div>
+          <div className="absolute inset-0" style={{ background: "radial-gradient(120% 100% at 50% 22%, rgba(18,11,3,0.20) 0%, rgba(18,11,3,0.55) 66%, rgba(18,11,3,0.82) 100%)" }} />
+        </div>
+        <KranokCorners />
+
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 overflow-y-auto px-4 py-8">
+          {/* hero title over the photo — matches the cinematic's title card */}
+          <div className="cm-fade-in flex flex-col items-center text-center">
+            <LannaEmblem size={42} />
+            <div className="wordmark mt-1.5 text-[34px] leading-[1.1] drop-shadow-[0_3px_16px_rgba(0,0,0,0.9)] sm:text-[46px]" style={{ color: "#fff" }}>
+              เชียงใหม่ <span style={{ color: "var(--gold)" }}>Transit</span>
             </div>
-            <div className="gold-rule my-3.5" />
+            <div className="mt-1.5 text-[11px] text-white/75 drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]">
+              <span className="uppercase tracking-[0.24em]">Chiang Mai</span>
+              <span> · {t("metro & songthaew planner", "ผังเมืองรถไฟฟ้า")}</span>
+            </div>
+            <button className="btn mt-2.5 px-2.5 py-1 text-[11px]" onClick={toggleLang} title="ภาษา / Language">
+              🌐 {lang === "en" ? "EN" : "ไทย"}
+            </button>
+          </div>
+
+          {/* the goal wizard, in a frosted-glass card floating over the photo */}
+          <div className="panel-glass panel-accent cm-pop-in relative max-h-[72vh] w-full max-w-[560px] overflow-y-auto px-7 py-6">
             <p className="text-[13px] leading-relaxed text-[var(--muted)]">
               {t(
                 `${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} people move around the real city; longer trips they drive (jamming roads). Build transit that beats driving.`,
@@ -551,13 +570,24 @@ export default function Page() {
                 </span>
               </button>
             ) : null}
-            <div className="mt-3 text-center text-[11px] text-[var(--muted)]">
-              {loaded
-                ? t("Goal → start-from → difficulty → Start.", "เป้าหมาย → เริ่มจาก → ความยาก → เริ่ม")
-                : t("Loading Chiang Mai street network…", "กำลังโหลดแผนที่เชียงใหม่…")}
+            <div className="mt-3 flex items-center justify-center gap-2 text-[11px] text-[var(--muted)]">
+              <span>
+                {loaded
+                  ? t("Goal → start-from → difficulty → Start.", "เป้าหมาย → เริ่มจาก → ความยาก → เริ่ม")
+                  : t("Loading Chiang Mai street network…", "กำลังโหลดแผนที่เชียงใหม่…")}
+              </span>
+              <button className="text-[var(--gold-deep)] hover:underline" onClick={() => setShowCinematic(true)}>
+                {t("▶ Watch intro", "▶ ดูฉากเปิด")}
+              </button>
             </div>
           </div>
         </div>
+        {showCinematic && (
+          <OpeningCinematic
+            lang={lang}
+            onDone={() => setShowCinematic(false)}
+          />
+        )}
       </main>
     );
   }
@@ -628,6 +658,9 @@ export default function Page() {
   // and drive). Relieve by adding trains (fleet) or a parallel line.
   const waiting = meta?.waiting ?? 0;
   const crowdedLines = (meta?.perLine ?? []).filter((p) => p.waiting > 50 && p.util > 0.85).length;
+  // riders currently aboard, split by mode (metro vs songthaew) for the stats panel
+  const ridingMetro = (meta?.perLine ?? []).filter((p) => p.mode === "metro").reduce((s, p) => s + p.riders, 0);
+  const ridingSong = (meta?.perLine ?? []).filter((p) => p.mode === "songthaew").reduce((s, p) => s + p.riders, 0);
 
   // --- chosen goal: live progress 0..100 + done + a one-line metric ---------
   // win targets scale with difficulty (fall back to the goal's base target)
@@ -948,10 +981,9 @@ export default function Page() {
                       }}
                     >
                       <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: rgb(l.color) }} />
-                      <span className="w-9 shrink-0">{MODE_PARAMS[l.mode].label}</span>
-                      <span className="flex-1 text-[var(--muted)]">
-                        {(l.totalLen / 1000).toFixed(1)} km · {l.mode === "metro" ? "🚆" : "🛻"}
-                        {l.fleet}
+                      <span className="w-5 shrink-0 text-center text-[13px] leading-none" title={MODE_PARAMS[l.mode].label}>{l.mode === "metro" ? "🚆" : "🛻"}</span>
+                      <span className="flex-1 truncate text-[var(--muted)]">
+                        {(l.totalLen / 1000).toFixed(1)} km
                       </span>
                       <span className="text-[10.5px]" style={{ color: crowded ? "var(--danger)" : "var(--muted)" }}>
                         {crowded ? "⚠" : ""}
@@ -991,7 +1023,8 @@ export default function Page() {
           <Stat label={t("Walking", "เดิน")} dot="var(--walk)" value={meta ? ppl(meta.walking) : "0"} />
           <Stat label={t("Driving", "ขับรถ")} dot="var(--warn)" value={meta ? ppl(meta.driving) : "0"} />
           <Stat label={t("Waiting", "รอ")} dot="#ffffff" value={meta ? ppl(meta.waiting) : "0"} />
-          <Stat label={t("On transit", "บนรถไฟ")} dot="var(--ride)" value={meta ? ppl(meta.riding) : "0"} />
+          <Stat label={t("On metro", "บนรถไฟฟ้า")} dot="var(--ride)" value={meta ? ppl(ridingMetro) : "0"} />
+          <Stat label={t("On songthaew", "บนสองแถว")} dot={rgb(MODE_PARAMS.songthaew.color)} value={meta ? ppl(ridingSong) : "0"} />
           <div className="my-1.5 h-px bg-[var(--fill-2)]" />
           <Stat label={t("Traffic", "รถติด")} value={meta ? `${meta.congestion}%` : "0%"} valueColor={meta && meta.congestion >= 55 ? "var(--warn)" : undefined} />
           <Stat label={t("Coverage", "ครอบคลุม")} value={meta ? `${meta.coverage}%` : "0%"} valueColor={meta && meta.coverage >= 60 ? "var(--ride)" : undefined} />

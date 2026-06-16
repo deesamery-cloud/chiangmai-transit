@@ -4,7 +4,7 @@ const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const browser = await chromium.launch({ headless: true, executablePath: CHROME, args: ["--no-sandbox","--use-gl=angle","--use-angle=swiftshader","--ignore-gpu-blocklist"] });
 
 const ctx = await browser.newContext({ viewport: { width: 1366, height: 850 }, deviceScaleFactor: 2 });
-await ctx.addInitScript(()=>localStorage.setItem("cm-onboarded","1")); // silence the build coachmark — testing advisors
+await ctx.addInitScript(()=>{ localStorage.setItem("cm-onboarded","1"); localStorage.setItem("cm-cine-skip","1"); }); // silence the build coachmark — testing advisors
 const page = await ctx.newPage();
 const errs=[]; page.on("pageerror",e=>errs.push(e.message)); page.on("console",m=>{if(m.type()==="error")errs.push(m.text());});
 const txt = () => page.evaluate(()=>document.body.innerText.replace(/\s+/g," "));

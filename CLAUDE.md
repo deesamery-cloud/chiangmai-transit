@@ -26,7 +26,9 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
 - Simulation runs in a **Web Worker**; routing is in-browser A* over an OSM road graph.
 - Data in `public/data/` (`network.graph.json`, `zones.json`, `pois.json`) extracted offline by
   pure-stdlib Python in `pipeline/` (no osmnx/GDAL).
-- pnpm. Fonts via `next/font` (Geist, Noto Sans Thai, Chonburi display) — never CSS `@import`
+- pnpm. Fonts via `next/font`, chosen to blend with the Lanna art (not a default sans): **Kanit** body/UI
+  (`--font-kanit`, Thai+Latin), **Trirong** serif display/wordmark (`--font-trirong`, Thai+Latin), Geist Mono
+  for tabular digits, Noto Sans Thai fallback. `--font-sans`/`--font-display` stacks in globals.css. Never CSS `@import`
   (Tailwind v4 inlines its own import and breaks load order → 500).
 
 ## Architecture / key files
@@ -48,6 +50,14 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
   basemap is muted via a CSS filter on `.maplibregl-canvas` (deck overlay stays full-saturation).
   Map build interaction works on mouse AND touch — `onClick` (tap) places/chains stations; the
   press-drag connect is mirrored to `onTouchStart/Move/End` for fingers.
+- `src/components/cinematic/OpeningCinematic.tsx` — a ~60s **cinematic opening** ("how you become Governor")
+  that plays **every time the game is entered** (skippable via the Skip ⏭ button; `showCinematic` inits `true`).
+  `localStorage cm-cine-skip==="1"` is a dev/test escape hatch to suppress it (the verify scripts set it). A
+  "▶ Watch intro" button on the start screen replays it after a skip. Six Magnific-painted 16:9 scenes in `public/cinematic/{1..6}.jpg` (dawn city → traffic →
+  appointment → governor overlook → transit vision → dusk title card) with Ken-Burns drift + crossfade + rising
+  bilingual narration + letterbox + progress timeline + Skip; click advances, last scene = title + Begin. Falls
+  back to a per-scene gradient if an image is missing. Verify: `scripts/verify-cinematic.mjs`. (Keyframes
+  `cm-kenburns/cm-cap-rise/cm-cine-title` in globals.css, honour reduced-motion.)
 - `src/lib/cm-songthaew.ts` — Chiang Mai's REAL songthaew (rod daeng) network as ~6 route corridors
   (researched: Warorot hub + colour-coded directions — red old-city loop, green→Mae Jo, blue→Sarapee/
   Lamphun, orange→Nimman/CMU, gold→railway, teal→airport). Used by the start screen's "Start from existing
@@ -55,7 +65,12 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
   is ready (`seedExistingRef`).
 - `src/app/page.tsx` — the whole HUD: **start screen is a goal → start-from → difficulty → Start flow**
   (goal cards SELECT not start; "start-from" = 🆕 scratch or 🛻 the real songthaew net; the run seed is now
-  HIDDEN + auto-randomised, no dice UI). Left panel (clock/economy/
+  HIDDEN + auto-randomised, no dice UI). It's styled to **match the cinematic**: a full-bleed photo backdrop
+  (`public/cinematic/6.jpg`, the cinematic's final dusk scene → seamless hand-off) with `.cm-bg-drift` ambient
+  Ken-Burns + a warm dark scrim, a white+gold hero title over it (force `color:#fff` — `.wordmark` is dark
+  teak), and the wizard in a `.panel-glass` frosted card (translucent parchment + blur). NOTE: do NOT put the
+  `.lanna-bg` class on an `absolute inset-0` layer — `.lanna-bg{position:relative}` is un-layered CSS that
+  beats Tailwind's `absolute` and collapses it to height 0; use a plain backdrop div + `style background`. Left panel (clock/economy/
   **single City Score grade** + an **inline grade breakdown** = 3 weighted bars ·68/·18/·14 + "biggest
   gain" next-step + satisfaction + per-line performance), right summary (stats + spark +
   **Travel-demand/OD panel**), bottom control bar, win/lose overlays, i18n (`t(en,th)`), undo,

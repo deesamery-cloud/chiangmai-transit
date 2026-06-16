@@ -32,7 +32,7 @@
   --ride: #2f8f6b;
   --walk: #5e7390;          /* muted indigo — walking                   */
   --wait: #b9851f;
-  --font-display: var(--font-chonburi), var(--font-thai), "Noto Sans Thai", Georgia, "Times New Roman", serif;
+  --font-display: var(--font-trirong), var(--font-thai), "Noto Sans Thai", Georgia, "Times New Roman", serif;
 }
 
 @theme inline {
@@ -41,7 +41,7 @@
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-kanit), var(--font-thai), system-ui, sans-serif;
   /* Geist Mono has no ฿ (baht) glyph — append a Thai-capable fallback so currency
      renders ฿ instead of a tofu/"B" while digits stay monospaced. */
   --font-mono: var(--font-geist-mono), var(--font-thai), "Noto Sans Thai", ui-monospace, monospace;
@@ -148,6 +148,7 @@ body {
 /* display wordmark — heritage serif for Latin, Thai falls back to Noto */
 .wordmark {
   font-family: var(--font-display);
+  font-weight: 600;
   letter-spacing: 0.005em;
   color: var(--ink);
 }
@@ -309,4 +310,40 @@ body {
   .btn { min-height: 44px; padding: 10px 14px; }
   .segmented > .seg { min-height: 44px; padding: 10px 13px; }
   .vtoggle { min-height: 44px; padding: 10px 13px; }
+}
+
+/* ── Opening cinematic (60s intro) ─────────────────────────────────────────
+   Slow Ken-Burns drift on each scene image + a rising caption. Honours
+   reduced-motion (static image, instant caption). */
+@keyframes cm-kenburns {
+  from { transform: scale(1.05) translate3d(0, 0, 0); }
+  to   { transform: scale(1.18) translate3d(-2.5%, -1.5%, 0); }
+}
+@keyframes cm-cap-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes cm-cine-title {
+  from { opacity: 0; transform: translateY(18px) scale(0.96); letter-spacing: 0.2em; }
+  to   { opacity: 1; transform: none; }
+}
+.cm-cine-img { animation: cm-kenburns var(--cine-dur, 11s) ease-out forwards; will-change: transform; }
+.cm-cine-cap { animation: cm-cap-rise 1s ease-out both; }
+.cm-cine-cap-2 { animation: cm-cap-rise 1s ease-out 0.25s both; }
+.cm-cine-title { animation: cm-cine-title 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* gentle ambient drift for the start-screen photo backdrop (loops forever) */
+.cm-bg-drift { animation: cm-kenburns 32s ease-in-out infinite alternate; will-change: transform; }
+/* frosted-glass card — a translucent parchment panel floating over the photo
+   backdrop so the cinematic art shows around it while the (light) inner content
+   stays fully readable */
+.panel-glass {
+  border-radius: 18px;
+  background: rgba(251, 247, 239, 0.8);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  border: 1px solid var(--gold-soft);
+  box-shadow: 0 24px 70px rgba(20, 12, 4, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-cine-img, .cm-cine-cap, .cm-cine-cap-2, .cm-cine-title, .cm-bg-drift { animation: none; }
 }
