@@ -27,6 +27,27 @@ export const CITIES: City[] = [
     dataDir: "",
     ready: true,
   },
+  // --- shipped: real OSM data + hand-seeded songthaew/baht-bus lines ---
+  {
+    id: "pattaya",
+    name: "Pattaya",
+    nameTh: "พัทยา",
+    center: [100.892, 12.925],
+    // bbox order here is [minLon, minLat, maxLon, maxLat]; extract.py used
+    // CITY_BBOX="12.88,100.855,12.97,100.93" (min_lat,min_lon,max_lat,max_lon).
+    bbox: [100.855, 12.88, 100.93, 12.97],
+    dataDir: "pattaya",
+    ready: true,
+  },
+  {
+    id: "huahin",
+    name: "Hua Hin",
+    nameTh: "หัวหิน",
+    center: [99.962, 12.57],
+    bbox: [99.93, 12.53, 100.005, 12.61],
+    dataDir: "huahin",
+    ready: true,
+  },
   // --- scaffolded (need data extraction; see MOBILE.md) ---
   {
     id: "bangkok",

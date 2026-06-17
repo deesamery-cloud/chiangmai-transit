@@ -29,17 +29,25 @@ Upstash/Vercel KV) — deferred; the client hook is ready to POST a score.
 `lowEndDevice()` (cores ≤4 / deviceMemory ≤3) → `AGENT_COUNT_LITE` (7k) agents with the
 display factor scaled up (`peoplePerAgent`) so on-screen city numbers stay accurate.
 
-## 5) More Thai cities (#6 — scaffolded)
-`src/lib/cities.ts` registers Bangkok / Khon Kaen / Phuket with their bboxes. To add a city's
-data, run the existing pure-stdlib extractor per its bbox and drop the output in
-`public/data/<id>/`:
+## 5) More Thai cities (#6 — Chiang Mai + Pattaya + Hua Hin shipped)
+`src/lib/cities.ts` is the registry. **Shipped (ready):** Chiang Mai (root `/data/`), Pattaya,
+Hua Hin. **Scaffolded (bbox only, `ready:false`):** Bangkok / Khon Kaen / Phuket.
+
+The runtime is wired: `useSim(dataDir)` fetches `/data/<dataDir>/…` (a `dataDir`-keyed effect, so
+switching city re-fetches), a city-chip picker sits on the start screen (scaffolded cities show a
+dimmed "soon"), the map re-centers via `city.center` (MapCanvas is remounted by `key={city.id}`),
+and per-city "existing transit" seeds live in `CITY_SEEDS` (`src/lib/cm-songthaew.ts`).
+
+To add another city, extract its data with the env-parameterized pipeline (no source edits) and
+drop it under `public/data/<dataDir>/`:
 ```bash
-# edit pipeline/extract.py bbox to the city's bbox from cities.ts, then:
-python3 pipeline/extract.py        # → network.graph.json, zones.json, pois.json
-mkdir -p public/data/bangkok && mv public/data/network.graph.json public/data/bangkok/  # etc.
+# CITY_BBOX="min_lat,min_lon,max_lat,max_lon"  CITY_OUT=<dataDir>  (run BOTH scripts, same env)
+CITY_BBOX="12.88,100.855,12.97,100.93" CITY_OUT=pattaya python3 pipeline/extract.py
+CITY_BBOX="12.88,100.855,12.97,100.93" CITY_OUT=pattaya python3 pipeline/extract-pois.py
 ```
-Then set `ready: true` in `cities.ts` and wire `useSim` to fetch `/data/<dataDir>/…` + add a
-city picker on the start screen + per-city songthaew seeds (pattern: `src/lib/cm-songthaew.ts`).
+Then flip `ready:true` in `cities.ts` and add a `CITY_SEEDS[<id>]` corridor set. Non-default cities
+are **lazy-loaded**: the service worker precaches only Chiang Mai and runtime-caches `/data/<dir>/*`
+on first visit, so keep each bbox tight. Verify with `node scripts/verify-cities.mjs`.
 
 ## 6) Songthaew identity (#7 — done)
 The start screen leads with the rod-daeng / songthaew hook; "Existing songthaew" start mode

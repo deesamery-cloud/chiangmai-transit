@@ -24,7 +24,15 @@ import urllib.request
 # --- Greater Chiang Mai: 4x the original CBD (Old City + Nimman + Night Bazaar
 # + Ping + CMU + airport edge + ring-road belt). 2x per side ~= 9 x 10 km. ---
 # (min_lat, min_lon, max_lat, max_lon)
+#
+# Multi-city: override per run via env vars so we never hand-edit constants.
+#   CITY_BBOX="min_lat,min_lon,max_lat,max_lon"  CITY_OUT=<subdir under public/data>
+# e.g.  CITY_BBOX="12.88,100.855,12.97,100.93" CITY_OUT=pattaya python3 extract.py
+# Defaults below = Chiang Mai (root public/data/, the original target).
 BBOX = (18.750, 98.936, 18.830, 99.032)
+if os.environ.get("CITY_BBOX"):
+    BBOX = tuple(float(x) for x in os.environ["CITY_BBOX"].split(","))
+    assert len(BBOX) == 4, "CITY_BBOX must be 'min_lat,min_lon,max_lat,max_lon'"
 
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
@@ -32,7 +40,8 @@ OVERPASS_ENDPOINTS = [
 ]
 UA = "chiangmai-transit-sim/1.0 (educational sandbox; contact: local)"
 
-OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "public", "data")
+# CITY_OUT="" (or unset) -> root public/data/ (Chiang Mai); otherwise a subdir.
+OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "public", "data", os.environ.get("CITY_OUT", ""))
 
 # Roads we treat as routable for walking + buses. Footways/cycleways/steps are
 # excluded to keep the graph compact; agents walk along these roads.
@@ -346,7 +355,7 @@ def write_json(name, obj):
 
 
 def main():
-    print(f"Chiang Mai CBD pipeline  bbox={BBOX}")
+    print(f"OSM pipeline  bbox={BBOX}  out={OUT_DIR}")
     graph = fetch_roads()
     write_json("network.graph.json", graph)
 

@@ -22,6 +22,11 @@ import urllib.parse
 import urllib.request
 
 BBOX = (18.750, 98.936, 18.830, 99.032)  # (min_lat, min_lon, max_lat, max_lon)
+# Multi-city: same env overrides as extract.py (keep them identical per run).
+#   CITY_BBOX="min_lat,min_lon,max_lat,max_lon"  CITY_OUT=<subdir under public/data>
+if os.environ.get("CITY_BBOX"):
+    BBOX = tuple(float(x) for x in os.environ["CITY_BBOX"].split(","))
+    assert len(BBOX) == 4, "CITY_BBOX must be 'min_lat,min_lon,max_lat,max_lon'"
 
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
@@ -29,7 +34,7 @@ OVERPASS_ENDPOINTS = [
     "https://overpass.private.coffee/api/interpreter",
 ]
 UA = "chiangmai-transit-sim/1.0 (educational sandbox; POI re-extract)"
-OUT = os.path.join(os.path.dirname(__file__), "..", "public", "data", "pois.json")
+OUT = os.path.join(os.path.dirname(__file__), "..", "public", "data", os.environ.get("CITY_OUT", ""), "pois.json")
 
 # fine category -> coarse engine purpose (Purpose union in types.ts)
 CAT_TO_P = {

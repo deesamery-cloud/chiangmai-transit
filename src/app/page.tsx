@@ -26,13 +26,13 @@ import {
 } from "@/lib/config";
 import { playSfx, setSfxMuted } from "@/lib/sfx";
 import { AdvisorIntro, AdvisorDock } from "@/components/advisors/AdvisorPanels";
-import { CM_SONGTHAEW } from "@/lib/cm-songthaew";
+import { CITY_SEEDS } from "@/lib/cm-songthaew";
+import { CITIES, DEFAULT_CITY } from "@/lib/cities";
 import { OpeningCinematic } from "@/components/cinematic/OpeningCinematic";
 import { Icon, type IconName } from "@/components/ui/Icon";
 
 const MapCanvas = dynamic(() => import("@/components/map/MapCanvas"), { ssr: false });
 
-const CENTER: [number, number] = [98.984, 18.79];
 const SPEEDS = [1, 10, 100, 1000]; // quick-preset chips for the speed gauge (slider covers 1–1000×)
 const rgb = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`;
 // per-line crowding 1..5 colours (match the train ramp) + a load→level helper
@@ -71,7 +71,16 @@ function money(v: number): string {
 }
 
 export default function Page() {
-  const sim = useSim();
+  // selected city (multi-city #6) — persisted; drives data load, map center + seeds
+  const [city, setCity] = useState(DEFAULT_CITY);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("cm-city");
+      const c = saved && CITIES.find((x) => x.id === saved && x.ready);
+      if (c) setCity(c);
+    } catch {}
+  }, []);
+  const sim = useSim(city.dataDir);
   const { loaded, started, ready, meta, lines, playing, speed, goal } = sim;
   // human-facing "people" count — agents are a 1:K sample; scale up to city scale.
   // K is dynamic (higher on the lite tier, which runs fewer agents) so numbers match.
@@ -225,12 +234,13 @@ export default function Page() {
     } catch {}
   }, [started, goal, difficulty, stations, lines]);
 
-  // "Start from existing songthaew": once the worker is ready, lay down Chiang
-  // Mai's real red-truck corridors so the player improves a live network.
+  // "Start from existing songthaew": once the worker is ready, lay down the
+  // selected city's real songthaew/baht-bus corridors so the player improves a
+  // live network (Chiang Mai red trucks, Pattaya baht buses, Hua Hin green, …).
   useEffect(() => {
     if (ready && seedExistingRef.current) {
       seedExistingRef.current = false;
-      for (const corr of CM_SONGTHAEW) sim.addLine(corr.points, "songthaew", corr.color);
+      for (const corr of CITY_SEEDS[city.id] ?? []) sim.addLine(corr.points, corr.mode ?? "songthaew", corr.color);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
@@ -538,7 +548,7 @@ export default function Page() {
             <div className="flex items-center gap-2.5">
               <LannaEmblem size={34} />
               <div className="wordmark text-[23px] leading-none drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)] sm:text-[30px]" style={{ color: "#fff" }}>
-                เชียงใหม่ <span style={{ color: "var(--gold)" }}>Transit</span>
+                {t(city.name, city.nameTh)} <span style={{ color: "var(--gold)" }}>Transit</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -562,10 +572,15 @@ export default function Page() {
               <div className="cm-fade-in max-w-[600px]">
                 <h1 className="wordmark text-[34px] leading-tight drop-shadow-[0_3px_18px_rgba(0,0,0,0.95)] sm:text-[52px]" style={{ color: "#fff" }}>{t("Choose your path", "เลือกเส้นทางของคุณ")}</h1>
                 <p className="mt-2 max-w-[540px] text-[14px] leading-relaxed text-white/80 drop-shadow">
-                  {t(
-                    `Chiang Mai runs on rod-daeng — its red songthaew trucks. ${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} people travel the real city; most still drive. Master the songthaew, build the metro, and pull the city off the road.`,
-                    `เชียงใหม่ขับเคลื่อนด้วย ‘รถแดง’ — สองแถวประจำเมือง · ผู้คน ${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} คนเดินทางจริง ส่วนใหญ่ยังขับรถ · จัดการรถแดง สร้างรถไฟฟ้า แล้วดึงคนออกจากถนน`,
-                  )}
+                  {city.id === "chiangmai"
+                    ? t(
+                        `Chiang Mai runs on rod-daeng — its red songthaew trucks. ${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} people travel the real city; most still drive. Master the songthaew, build the metro, and pull the city off the road.`,
+                        `เชียงใหม่ขับเคลื่อนด้วย ‘รถแดง’ — สองแถวประจำเมือง · ผู้คน ${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} คนเดินทางจริง ส่วนใหญ่ยังขับรถ · จัดการรถแดง สร้างรถไฟฟ้า แล้วดึงคนออกจากถนน`,
+                      )
+                    : t(
+                        `${city.name} runs on songthaew — its shared baht-bus trucks. Most people still drive. Master the songthaew, build the metro, and pull the city off the road.`,
+                        `${city.nameTh}ขับเคลื่อนด้วยสองแถว · ส่วนใหญ่ยังขับรถ · จัดการสองแถว สร้างรถไฟฟ้า แล้วดึงคนออกจากถนน`,
+                      )}
                 </p>
               </div>
             )}
@@ -573,7 +588,25 @@ export default function Page() {
 
           {/* bottom control deck */}
           <div className="px-4 pb-5 sm:px-8 sm:pb-7">
-            {/* 🗓️ Daily Challenge — one seeded map a day; reason to come back tomorrow */}
+            {/* 🏙️ City picker (#6) — "fix YOUR city". Ready cities selectable; the rest dimmed "soon". */}
+            <div className="mb-2.5 flex items-center gap-1.5 overflow-x-auto pb-0.5">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-white/55">{t("City", "เมือง")}</span>
+              {CITIES.map((c) => (
+                <button
+                  key={c.id}
+                  disabled={!c.ready || (city.id === c.id && !loaded)}
+                  onClick={() => { if (c.ready && c.id !== city.id) { setCity(c); try { localStorage.setItem("cm-city", c.id); } catch {} } }}
+                  className="rpg-chip shrink-0 disabled:opacity-40"
+                  data-on={city.id === c.id}
+                  title={c.ready ? c.name : `${c.name} — coming soon`}
+                >
+                  {c.nameTh}{!c.ready && <span className="ml-1 text-[9px] opacity-70">{t("soon", "เร็วๆ นี้")}</span>}
+                </button>
+              ))}
+            </div>
+            {/* 🗓️ Daily Challenge — one seeded map a day; reason to come back tomorrow.
+                Kept on the default city so the (future) leaderboard stays comparable. */}
+            {city.id === DEFAULT_CITY.id && (
             <button
               disabled={!loaded}
               onClick={startDaily}
@@ -590,6 +623,7 @@ export default function Page() {
               </span>
               <span className="rpg-chip" data-on="true">{t("Play ▶", "เล่น ▶")}</span>
             </button>
+            )}
 
             {/* 4 big goal photo tiles */}
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
@@ -801,6 +835,7 @@ export default function Page() {
     <main className="relative h-full w-full isolate">
       <div className="absolute inset-0 z-0">
       <MapCanvas
+        key={city.id}
         graph={sim.graph}
         lines={lines}
         vehicles={meta?.vehicles}
@@ -821,7 +856,7 @@ export default function Page() {
         }}
         selectedLineId={selectedLineId}
         onSelectLine={(id) => setSelectedLineId((cur) => (cur === id ? null : id))}
-        center={CENTER}
+        center={city.center}
         showDensity={false}
         showAgents={showAgents}
         showCoverage={showCoverage}
@@ -852,7 +887,7 @@ export default function Page() {
         <div className="panel panel-frame panel-accent px-4 py-3">
           <div className="flex items-center justify-between gap-2">
             <div className="wordmark flex items-center gap-1.5 text-[15px] leading-[1.35]">
-              <LannaEmblem size={16} /> เชียงใหม่ Transit
+              <LannaEmblem size={16} /> {t(city.name, city.nameTh)} Transit
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] text-[var(--muted)]">
@@ -1639,6 +1674,8 @@ export default function Page() {
         <AdvisorIntro
           lang={lang}
           goalLabel={goal ? t(goalDef?.label ?? "Free Build", goalTh[goal].label) : undefined}
+          cityName={city.name}
+          cityNameTh={city.nameTh}
           onDone={() => setShowIntro(false)}
         />
       )}

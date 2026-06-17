@@ -14,8 +14,10 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
 
 ## Mobile / Thai-local (see MOBILE.md)
 The game is a **PWA** (installable + offline) and **static-exports** for **Capacitor** (Play/App Store).
-- **PWA**: `public/manifest.webmanifest` + `public/sw.js` (caches app shell + `/data/*.json`) + `public/icons/*`
+- **PWA**: `public/manifest.webmanifest` + `public/sw.js` (`CACHE="cm-transit-v2"`) + `public/icons/*`
   + `<PwaRegister/>` (in `layout.tsx`). `next.config.ts` has `output:"export"` → `pnpm build` emits `./out`.
+  SW **precaches only the default city** (Chiang Mai root `/data/*`) and **runtime-caches** other cities'
+  `/data/<dir>/*` on first visit (lazy-load — keeps install small). Bump `CACHE` on each release to invalidate.
   **GOTCHA: the SW registers ONLY in production.** A cache-first SW in `next dev` caches HMR chunks and serves
   them stale → reloads hang / ChunkLoadError. `PwaRegister` self-heals in dev (unregisters any SW + clears caches);
   if a dev page misbehaves, hard-refresh (Cmd+Shift+R) once.
@@ -25,9 +27,19 @@ The game is a **PWA** (installable + offline) and **static-exports** for **Capac
   `localStorage cm-daily`; a gold strip on the RPG start screen. Global leaderboard = deferred (needs serverless KV).
 - **Low-end perf tier** (`lowEndDevice()` + `AGENT_COUNT_LITE` in config.ts): weak phones run 7k agents (not 15k);
   `useSim.peoplePerAgent` scales the display factor up so on-screen city numbers stay accurate (page's `ppl` uses it).
-- **Cities** (`src/lib/cities.ts`): registry (Chiang Mai live; Bangkok/Khon Kaen/Phuket scaffolded with bboxes for
-  `pipeline/extract.py`). Loader still fetches root `/data` (Chiang Mai) — per-city loader + picker = remaining work.
-- Verify mobile/PWA: `scripts/verify-mobile.mjs` (manifest/icons/SW/Daily, 390px).
+- **Cities** (`src/lib/cities.ts`): registry. **Live:** Chiang Mai (root `/data`), Pattaya, Hua Hin.
+  **Scaffolded** (bbox only, `ready:false`): Bangkok/Khon Kaen/Phuket. `useSim(dataDir)` fetches `/data/<dataDir>/`
+  via a `dataDir`-keyed effect (worker is created once in a separate mount effect; switching city re-fetches +
+  resets `loaded`). `page.tsx` holds the selected `city` (persisted `localStorage cm-city`), drives `city.center`
+  (MapCanvas remounts on `key={city.id}` so it re-centers), and shows a city-chip picker on the start screen
+  (scaffolded = dimmed "soon"). Daily Challenge is shown only for the default city (comparable scores).
+  Add a city: env-parameterized extract (`CITY_BBOX`/`CITY_OUT`, see pipeline/README) → `public/data/<dir>/` →
+  `ready:true` → a `CITY_SEEDS[<id>]` corridor set.
+- **Per-city transit seeds** (`src/lib/cm-songthaew.ts`): `CITY_SEEDS: Record<cityId, SongthaewCorridor[]>`
+  (Chiang Mai red trucks, Pattaya baht buses, Hua Hin green). Corridors take an optional `mode` (default
+  "songthaew"); the "Existing songthaew" start seeds `CITY_SEEDS[city.id]` via `sim.addLine`.
+- Verify: `scripts/verify-mobile.mjs` (PWA/Daily, 390px) + `scripts/verify-cities.mjs` (chips, city switch
+  re-fetch, Pattaya game). Both 390px headless.
 - Typecheck: **`./node_modules/.bin/tsc --noEmit`** — do NOT use `pnpm exec tsc` (it mis-resolves to
   a bogus standalone `tsc` package and pulls extra deps).
 - Headless sim test: `pnpm dlx tsx scripts/sim-smoke.ts` (prints economy + OD + demographic +
@@ -80,11 +92,11 @@ The game is a **PWA** (installable + offline) and **static-exports** for **Capac
   bilingual narration + letterbox + progress timeline + Skip; click advances, last scene = title + Begin. Falls
   back to a per-scene gradient if an image is missing. Verify: `scripts/verify-cinematic.mjs`. (Keyframes
   `cm-kenburns/cm-cap-rise/cm-cine-title` in globals.css, honour reduced-motion.)
-- `src/lib/cm-songthaew.ts` — Chiang Mai's REAL songthaew (rod daeng) network as ~6 route corridors
-  (researched: Warorot hub + colour-coded directions — red old-city loop, green→Mae Jo, blue→Sarapee/
-  Lamphun, orange→Nimman/CMU, gold→railway, teal→airport). Used by the start screen's "Start from existing
-  songthaew" option, which seeds them via `sim.addLine(corridor.points, "songthaew", color)` once the worker
-  is ready (`seedExistingRef`).
+- `src/lib/cm-songthaew.ts` — per-city REAL songthaew/baht-bus networks as route corridors, keyed by city id
+  in `CITY_SEEDS` (Chiang Mai rod-daeng: Warorot hub + colour-coded red/green/blue/orange/gold/teal; Pattaya
+  baht-bus Beach↔Second loop + Sukhumvit/Jomtien/Naklua; Hua Hin green: Phetkasem/beach/Khao Takiab). Used by
+  the start screen's "Start from existing songthaew" option, which seeds `CITY_SEEDS[city.id]` via
+  `sim.addLine(corridor.points, corridor.mode ?? "songthaew", color)` once the worker is ready (`seedExistingRef`).
 - `src/app/page.tsx` — the whole HUD. **Start screen = an RPG-style full-screen mode select** (NOT a form):
   a big cinematic photo per goal (`public/modeselect/{cars,money,grade,free}.jpg`, `GOAL_PHOTO`) fills the
   screen and crossfades as you hover/pick (`focusGoal` for hover, `selGoal` for the choice); a huge white+gold

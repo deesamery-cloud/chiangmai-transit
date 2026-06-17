@@ -20,8 +20,31 @@ Writes into `../public/data/`:
 ## Changing the area
 
 Edit `BBOX = (min_lat, min_lon, max_lat, max_lon)` at the top of `extract.py`
-and re-run. The app's initial map center in `src/app/page.tsx` (`CENTER`) should
-roughly match the new bbox center.
+and re-run. The app's initial map center now comes from `src/lib/cities.ts`
+(`center` per city), not a single `CENTER` const.
+
+## Adding another city (multi-city)
+
+Both scripts read `CITY_BBOX` + `CITY_OUT` env vars (falling back to the Chiang
+Mai constants), so you never hand-edit the source. `CITY_OUT` is the subdir under
+`public/data/` (must match the city's `dataDir` in `src/lib/cities.ts`); run
+**both** scripts with the **same** env so the trio lands together:
+
+```bash
+# Pattaya -> public/data/pattaya/{network.graph,pois,zones}.json
+CITY_BBOX="12.88,100.855,12.97,100.93" CITY_OUT=pattaya python3 extract.py
+CITY_BBOX="12.88,100.855,12.97,100.93" CITY_OUT=pattaya python3 extract-pois.py
+
+# Hua Hin -> public/data/huahin/...
+CITY_BBOX="12.53,99.93,12.61,100.005" CITY_OUT=huahin python3 extract.py
+CITY_BBOX="12.53,99.93,12.61,100.005" CITY_OUT=huahin python3 extract-pois.py
+```
+
+Then flip that city's `ready: true` in `src/lib/cities.ts`. Non-default cities
+are **lazy-loaded** (the service worker runtime-caches `/data/<dir>/*.json` on
+first visit; only Chiang Mai is precached), so keep each city's bbox tight to
+avoid bloating first-load. `CITY_BBOX` order is `min_lat,min_lon,max_lat,max_lon`
+— note this is lat/lon-swapped vs the `[minLon,minLat,…]` bbox in `cities.ts`.
 
 ## Notes
 

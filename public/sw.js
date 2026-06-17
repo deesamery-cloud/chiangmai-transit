@@ -1,7 +1,13 @@
 // Offline service worker — the game is 100% client-side after load, so we cache
 // the app shell + the static sim data (graph/zones/pois) and serve it offline.
 // Bump CACHE on each release to invalidate.
-const CACHE = "cm-transit-v1";
+//
+// Multi-city (#6): we PRECACHE only the default city (Chiang Mai, root /data/*)
+// so install stays small. Other cities (e.g. /data/pattaya/*) are LAZY-LOADED —
+// the cache-first fetch handler below runtime-caches any same-origin 200 on first
+// visit, so a city plays offline after you've opened it once, without bloating the
+// initial install / low-end first load.
+const CACHE = "cm-transit-v2";
 const PRECACHE = [
   "/",
   "/manifest.webmanifest",

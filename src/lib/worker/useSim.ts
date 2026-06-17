@@ -82,7 +82,7 @@ export interface UseSim {
   dismissNotice: () => void;
 }
 
-export function useSim(): UseSim {
+export function useSim(dataDir: string = ""): UseSim {
   const [loaded, setLoaded] = useState(false);
   const [started, setStarted] = useState(false);
   const [ready, setReady] = useState(false);
@@ -113,8 +113,8 @@ export function useSim(): UseSim {
   const linesRef = useRef<TransitLine[]>([]);
   const throttle = useRef(0);
 
+  // Worker lifecycle — created once for the page; reused across city switches.
   useEffect(() => {
-    let alive = true;
     const worker = new Worker(new URL("./sim.worker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
 
@@ -160,11 +160,27 @@ export function useSim(): UseSim {
       }
     };
 
+    return () => {
+      worker.terminate();
+    };
+  }, []);
+
+  // Per-city data — refetched whenever the selected city (dataDir) changes.
+  // dataDir === "" keeps the root /data/*.json (Chiang Mai); a non-empty dir
+  // loads /data/<dir>/*.json (lazy-loaded + runtime-cached by the SW).
+  useEffect(() => {
+    let alive = true;
+    // intentionally reset the loading gate when the city changes so the start
+    // screen disables play/begin while the new city's data streams in.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoaded(false);
+    dataRef.current = null;
+    const base = `/data/${dataDir ? dataDir + "/" : ""}`;
     (async () => {
       const [g, z, p] = await Promise.all([
-        fetch("/data/network.graph.json").then((r) => r.json() as Promise<GraphData>),
-        fetch("/data/zones.json").then((r) => r.json() as Promise<ZoneData>),
-        fetch("/data/pois.json").then((r) => r.json() as Promise<PoiData>),
+        fetch(`${base}network.graph.json`).then((r) => r.json() as Promise<GraphData>),
+        fetch(`${base}zones.json`).then((r) => r.json() as Promise<ZoneData>),
+        fetch(`${base}pois.json`).then((r) => r.json() as Promise<PoiData>),
       ]);
       if (!alive) return;
       const gr = new Graph(g);
@@ -179,9 +195,8 @@ export function useSim(): UseSim {
 
     return () => {
       alive = false;
-      worker.terminate();
     };
-  }, []);
+  }, [dataDir]);
 
   const send = useCallback((msg: ToWorker) => {
     workerRef.current?.postMessage(msg);
