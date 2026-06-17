@@ -48,6 +48,26 @@ export const CITIES: City[] = [
     dataDir: "huahin",
     ready: true,
   },
+  {
+    id: "hatyai",
+    name: "Hat Yai",
+    nameTh: "หาดใหญ่",
+    center: [100.474, 7.008],
+    // CITY_BBOX="6.98,100.44,7.04,100.51" (min_lat,min_lon,max_lat,max_lon)
+    bbox: [100.44, 6.98, 100.51, 7.04],
+    dataDir: "hatyai",
+    ready: true,
+  },
+  {
+    id: "korat",
+    name: "Korat",
+    nameTh: "นครราชสีมา",
+    center: [102.1, 14.975],
+    // CITY_BBOX="14.94,102.06,15.01,102.14"
+    bbox: [102.06, 14.94, 102.14, 15.01],
+    dataDir: "korat",
+    ready: true,
+  },
   // --- scaffolded (need data extraction; see MOBILE.md) ---
   {
     id: "bangkok",

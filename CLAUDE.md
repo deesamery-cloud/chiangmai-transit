@@ -29,7 +29,7 @@ The game is **installable** (manifest) and **static-exports** for **Capacitor** 
   `localStorage cm-daily`; a gold strip on the RPG start screen. Global leaderboard = deferred (needs serverless KV).
 - **Low-end perf tier** (`lowEndDevice()` + `AGENT_COUNT_LITE` in config.ts): weak phones run 7k agents (not 15k);
   `useSim.peoplePerAgent` scales the display factor up so on-screen city numbers stay accurate (page's `ppl` uses it).
-- **Cities** (`src/lib/cities.ts`): registry. **Live:** Chiang Mai (root `/data`), Pattaya, Hua Hin.
+- **Cities** (`src/lib/cities.ts`): registry. **Live:** Chiang Mai (root `/data`), Pattaya, Hua Hin, Hat Yai, Korat.
   **Scaffolded** (bbox only, `ready:false`): Bangkok/Khon Kaen/Phuket. `useSim(dataDir)` fetches `/data/<dataDir>/`
   via a `dataDir`-keyed effect (worker is created once in a separate mount effect; switching city re-fetches +
   resets `loaded`). `page.tsx` holds the selected `city` (persisted `localStorage cm-city`), drives `city.center`

@@ -134,10 +134,86 @@ const HUAHIN: SongthaewCorridor[] = [
   },
 ];
 
+// --- Hat Yai (songthaew) --------------------------------------------------
+// CBD hub around the Kim Yong / Lee Garden market on the Niphat Uthit roads;
+// Phetkasem spine, Thamnoonvithi crosstown to the railway, the PSU/Kho Hong
+// south line and the north corridor.
+const HATYAI: SongthaewCorridor[] = [
+  {
+    name: "Niphat Uthit market loop",
+    nameTh: "นิพัทธ์อุทิศ — ตลาดกลาง",
+    color: C("Red"),
+    points: [P(100.470, 7.012), P(100.478, 7.012), P(100.478, 7.004), P(100.470, 7.004), P(100.470, 7.012)],
+  },
+  {
+    name: "Phetkasem spine (N–S)",
+    nameTh: "เพชรเกษม (เหนือ–ใต้)",
+    color: C("Blue"),
+    points: [P(100.474, 7.030), P(100.474, 7.010), P(100.475, 6.990)],
+  },
+  {
+    name: "Thamnoonvithi → railway",
+    nameTh: "ธรรมนูญวิถี → สถานีรถไฟ",
+    color: C("Green"),
+    points: [P(100.465, 7.008), P(100.474, 7.008), P(100.485, 7.008)],
+  },
+  {
+    name: "Kho Hong / PSU (south)",
+    nameTh: "คอหงส์ / ม.อ. (ใต้)",
+    color: C("Orange"),
+    points: [P(100.475, 6.995), P(100.490, 6.986), P(100.500, 6.982)],
+  },
+  {
+    name: "North corridor",
+    nameTh: "สายเหนือ",
+    color: C("Purple"),
+    points: [P(100.474, 7.015), P(100.470, 7.028), P(100.466, 7.038)],
+  },
+];
+
+// --- Korat / Nakhon Ratchasima (songthaew) --------------------------------
+// Old-city moat (Thao Suranari/Ya Mo, Chumphon Gate) on Ratchadamnoen; the
+// Mittraphap highway spine, Jomsurangyat crosstown, the west (The Mall) line
+// and the south/railway corridor.
+const KORAT: SongthaewCorridor[] = [
+  {
+    name: "Ratchadamnoen old-city (E–W)",
+    nameTh: "ราชดำเนิน — เมืองเก่า/ย่าโม",
+    color: C("Red"),
+    points: [P(102.085, 14.975), P(102.098, 14.975), P(102.112, 14.975)],
+  },
+  {
+    name: "Mittraphap spine (N–S)",
+    nameTh: "มิตรภาพ (เหนือ–ใต้)",
+    color: C("Blue"),
+    points: [P(102.100, 15.005), P(102.100, 14.980), P(102.100, 14.955)],
+  },
+  {
+    name: "Jomsurangyat / Suranaree",
+    nameTh: "จอมสุรางค์ยาตร์ / สุรนารี",
+    color: C("Green"),
+    points: [P(102.090, 14.985), P(102.100, 14.985), P(102.115, 14.982)],
+  },
+  {
+    name: "West (The Mall)",
+    nameTh: "ตะวันตก (เดอะมอลล์)",
+    color: C("Orange"),
+    points: [P(102.085, 14.970), P(102.075, 14.965), P(102.066, 14.960)],
+  },
+  {
+    name: "South / railway",
+    nameTh: "ใต้ / สถานีรถไฟ",
+    color: C("Purple"),
+    points: [P(102.098, 14.965), P(102.095, 14.950), P(102.092, 14.943)],
+  },
+];
+
 // Per-city "existing transit" seeds, keyed by City.id. Cities without an entry
 // simply start from a blank network.
 export const CITY_SEEDS: Record<string, SongthaewCorridor[]> = {
   chiangmai: CM_SONGTHAEW,
   pattaya: PATTAYA,
   huahin: HUAHIN,
+  hatyai: HATYAI,
+  korat: KORAT,
 };

@@ -29,9 +29,9 @@ Upstash/Vercel KV) — deferred; the client hook is ready to POST a score.
 `lowEndDevice()` (cores ≤4 / deviceMemory ≤3) → `AGENT_COUNT_LITE` (7k) agents with the
 display factor scaled up (`peoplePerAgent`) so on-screen city numbers stay accurate.
 
-## 5) More Thai cities (#6 — Chiang Mai + Pattaya + Hua Hin shipped)
+## 5) More Thai cities (#6 — 5 cities shipped)
 `src/lib/cities.ts` is the registry. **Shipped (ready):** Chiang Mai (root `/data/`), Pattaya,
-Hua Hin. **Scaffolded (bbox only, `ready:false`):** Bangkok / Khon Kaen / Phuket.
+Hua Hin, Hat Yai, Korat. **Scaffolded (bbox only, `ready:false`):** Bangkok / Khon Kaen / Phuket.
 
 The runtime is wired: `useSim(dataDir)` fetches `/data/<dataDir>/…` (a `dataDir`-keyed effect, so
 switching city re-fetches), a city-chip picker sits on the start screen (scaffolded cities show a
