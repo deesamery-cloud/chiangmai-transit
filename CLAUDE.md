@@ -13,14 +13,16 @@ pnpm dev          # http://localhost:3000  (dev server works on :3000)
 ```
 
 ## Mobile / Thai-local (see MOBILE.md)
-The game is a **PWA** (installable + offline) and **static-exports** for **Capacitor** (Play/App Store).
-- **PWA**: `public/manifest.webmanifest` + `public/sw.js` (`CACHE="cm-transit-v2"`) + `public/icons/*`
-  + `<PwaRegister/>` (in `layout.tsx`). `next.config.ts` has `output:"export"` → `pnpm build` emits `./out`.
-  SW **precaches only the default city** (Chiang Mai root `/data/*`) and **runtime-caches** other cities'
-  `/data/<dir>/*` on first visit (lazy-load — keeps install small). Bump `CACHE` on each release to invalidate.
-  **GOTCHA: the SW registers ONLY in production.** A cache-first SW in `next dev` caches HMR chunks and serves
-  them stale → reloads hang / ChunkLoadError. `PwaRegister` self-heals in dev (unregisters any SW + clears caches);
-  if a dev page misbehaves, hard-refresh (Cmd+Shift+R) once.
+The game is **installable** (manifest) and **static-exports** for **Capacitor** (Play/App Store).
+- **Service worker / offline caching is DISABLED** (2026-06-17, "remove cache permanently"): a cache-first
+  SW kept serving stale chunks → dead, unclickable pages. `public/sw.js` is now a **self-destruct kill switch**
+  (unregisters itself + deletes all caches + reloads tabs on activate; never intercepts fetches), and
+  `PwaRegister` **never registers** a worker — every load actively unregisters any leftover SW + clears caches
+  (one guarded reload if a stale SW was still controlling the page). So the install is still there
+  (`public/manifest.webmanifest` + `public/icons/*` + `<PwaRegister/>` in `layout.tsx`) but there is **no
+  offline caching**. To re-enable offline later: restore a cache/network-first impl in `public/sw.js` and
+  re-add `register("/sw.js")` (production-only) in `PwaRegister.tsx`. `next.config.ts` has `output:"export"`
+  → `pnpm build` emits `./out`.
 - **Capacitor**: `capacitor.config.json` (`webDir:"out"`) + `pnpm cap:android` / `cap:ios` (run on your machine —
   needs Android Studio / Xcode). Verified `pnpm build` produces a clean static `out/`.
 - **Daily Challenge** (`startDaily` in page.tsx): date-seeded Grade-A/scratch/Medium run, local best + streak in
