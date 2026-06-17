@@ -267,11 +267,16 @@ export default function Page() {
 
   const pickTool = (t: Tool) => {
     if (t === "track" || t === "route") {
-      // a new line gets the first free palette colour
-      const used = new Set(lines.map((l) => l.color.join(",")));
-      const free = LINE_COLORS.findIndex((c) => !used.has(c.rgb.join(",")));
-      setColorIdx(free >= 0 ? free : 0);
-      setSelectedLineId(null);
+      // Keep a selected songthaew line when entering the route tool so it can be
+      // EXTENDED (draw more route → it appends). Otherwise start a NEW line with
+      // the first free palette colour.
+      const keepForExtend = t === "route" && lines.some((l) => l.id === selectedLineId && l.mode === "songthaew");
+      if (!keepForExtend) {
+        const used = new Set(lines.map((l) => l.color.join(",")));
+        const free = LINE_COLORS.findIndex((c) => !used.has(c.rgb.join(",")));
+        setColorIdx(free >= 0 ? free : 0);
+        setSelectedLineId(null);
+      }
     }
     setChain([]);
     setRouteDraft([]);
@@ -294,23 +299,70 @@ export default function Page() {
   };
   // 🛻 songthaew: add a free road waypoint, and finish the drawn route into a line
   const addRoutePoint = (lon: number, lat: number) => setRouteDraft((p) => [...p, { lon, lat }]);
+  // EXTEND an existing songthaew line by drawing more route: combine the line's
+  // waypoints with the new draw, attaching at whichever end the new route is
+  // closest to (so you can continue from either end).
+  const combineExtend = (line: TransitLine, draft: { lon: number; lat: number }[]) => {
+    const base =
+      line.drawPoints && line.drawPoints.length >= 2
+        ? line.drawPoints
+        : line.stops.map((s) => ({ lon: s.lon, lat: s.lat }));
+    const a = base[0], b = base[base.length - 1];
+    const f = draft[0], l = draft[draft.length - 1];
+    const dFA = haversine(f.lon, f.lat, a.lon, a.lat);
+    const dFB = haversine(f.lon, f.lat, b.lon, b.lat);
+    const dLA = haversine(l.lon, l.lat, a.lon, a.lat);
+    const dLB = haversine(l.lon, l.lat, b.lon, b.lat);
+    const m = Math.min(dFA, dFB, dLA, dLB);
+    if (m === dFB) return [...base, ...draft]; // draft starts at end B → append
+    if (m === dLB) return [...base, ...[...draft].reverse()]; // draft ends at B → append reversed
+    if (m === dFA) return [...[...draft].reverse(), ...base]; // draft starts at start A → prepend reversed
+    return [...draft, ...base]; // draft ends at start A → prepend
+  };
+  // which songthaew line a new route should extend: the SELECTED one (explicit
+  // intent), else any whose endpoint the new route starts/ends near.
+  const routeExtendTarget = (draft: { lon: number; lat: number }[]): TransitLine | null => {
+    const cand = lines.filter((l) => l.mode === "songthaew" && l.stops.length >= 2);
+    const nearEnd = (l: TransitLine) => {
+      const a = l.stops[0], b = l.stops[l.stops.length - 1];
+      const f = draft[0], g = draft[draft.length - 1];
+      return Math.min(
+        haversine(f.lon, f.lat, a.lon, a.lat), haversine(f.lon, f.lat, b.lon, b.lat),
+        haversine(g.lon, g.lat, a.lon, a.lat), haversine(g.lon, g.lat, b.lon, b.lat),
+      );
+    };
+    const sel = cand.find((l) => l.id === selectedLineId);
+    if (sel) return sel; // selected songthaew line → always extend it
+    const EXTEND_M = 400; // otherwise auto-extend when the draw begins/ends at an endpoint
+    let best: TransitLine | null = null;
+    let bestD = EXTEND_M;
+    for (const l of cand) { const d = nearEnd(l); if (d < bestD) { bestD = d; best = l; } }
+    return best;
+  };
   const finishRoute = () => {
     if (routeDraft.length < 2) {
       setRouteDraft([]);
       return;
     }
     pushUndo();
-    const nl = sim.addLine(routeDraft, "songthaew", LINE_COLORS[colorIdx].rgb);
+    const target = routeExtendTarget(routeDraft);
+    const nl = target
+      ? sim.replaceLine(target.id, combineExtend(target, routeDraft), "songthaew", target.color, target.fleet)
+      : sim.addLine(routeDraft, "songthaew", LINE_COLORS[colorIdx].rgb);
     setRouteDraft([]);
-    // auto-select the new feeder + drop to pan so the ＋ Add songthaew strip appears.
+    // auto-select the line + drop to pan so the ＋ Add songthaew strip appears.
     // Only sound the success "clack" when the route actually built.
     if (nl) {
       playSfx("clack");
       setSelectedLineId(nl.id);
       setTool("pan");
-      const conns = connectsTo(nl);
-      const link = conns > 0 ? t(` · 🔗 connects to ${conns} line${conns > 1 ? "s" : ""}`, ` · 🔗 เชื่อม ${conns} สาย`) : "";
-      setBuildFlash(t("✓ Songthaew route open — riders boarding…", "✓ เปิดเส้นทางสองแถวแล้ว — ผู้โดยสารกำลังขึ้นรถ…") + link);
+      if (target) {
+        setBuildFlash(t("✓ Songthaew route extended — new stops live", "✓ ต่อเส้นทางสองแถวแล้ว — ป้ายใหม่เปิดให้บริการ"));
+      } else {
+        const conns = connectsTo(nl);
+        const link = conns > 0 ? t(` · 🔗 connects to ${conns} line${conns > 1 ? "s" : ""}`, ` · 🔗 เชื่อม ${conns} สาย`) : "";
+        setBuildFlash(t("✓ Songthaew route open — riders boarding…", "✓ เปิดเส้นทางสองแถวแล้ว — ผู้โดยสารกำลังขึ้นรถ…") + link);
+      }
     }
   };
   const cancelRoute = () => {
@@ -1458,7 +1510,9 @@ export default function Page() {
               ))}
             </span>
             <span className="px-1 text-[11px] text-[var(--muted)]">
-              {t("click road points · then Finish", "คลิกจุดบนถนน · แล้วกด Finish")} · {routeDraft.length}
+              {lines.some((l) => l.id === selectedLineId && l.mode === "songthaew")
+                ? t("extending selected line — draw onward, then Finish", "ต่อสายที่เลือก — วาดต่อ แล้วกด Finish")
+                : t("click road points · Finish. Start at a line's end to extend it.", "คลิกจุดบนถนน · กด Finish · เริ่มที่ปลายสายเดิมเพื่อต่อสาย")} · {routeDraft.length}
             </span>
             <button className="btn" onClick={() => setRouteDraft((p) => p.slice(0, -1))} disabled={!routeDraft.length}>
               ↶ Undo

@@ -105,6 +105,7 @@ export interface TransitLine {
   fleet: number; // number of vehicles (trains/buses) running this line, 1-5
   capex: number; // one-off build cost (baht)
   stationIds?: string[]; // ordered PlacedStation ids this line is built from (for extend / per-station demolish)
+  drawPoints?: { lon: number; lat: number }[]; // ordered waypoints a route-drawn (songthaew) line was drawn from (for extend)
 }
 
 export interface PerLine {

@@ -65,6 +65,14 @@ export interface UseSim {
     mode: LineMode,
     color?: [number, number, number],
   ) => TransitLine | null;
+  // rebuild a route-drawn (songthaew) line in place from new waypoints (extend)
+  replaceLine: (
+    lineId: string,
+    points: DrawPoint[],
+    mode: LineMode,
+    color: [number, number, number],
+    fleet: number,
+  ) => TransitLine | null;
   // rebuild an existing line in place from a new ordered station list (extend / per-station demolish)
   replaceLineFromStations: (
     lineId: string,
@@ -278,6 +286,26 @@ export function useSim(dataDir: string = ""): UseSim {
     },
     [send],
   );
+  // rebuild a route-drawn (songthaew) line in place from new waypoints (extend)
+  const replaceLine = useCallback(
+    (lineId: string, points: DrawPoint[], mode: LineMode, color: [number, number, number], fleet: number) => {
+      const g = graphRef.current;
+      const router = routerRef.current;
+      if (!g || !router) return null;
+      const l = buildLine(g, router, points, mode, color, fleet, lineId);
+      if (!l) {
+        setNotice("ต่อเส้นทางไม่ได้ — ลองจุดบนถนนที่เชื่อมกัน · Couldn’t extend that route — try points along connected streets.");
+        return null;
+      }
+      setLines((prev) => {
+        const next = prev.map((x) => (x.id === lineId ? l : x));
+        send({ type: "setNetwork", lines: next });
+        return next;
+      });
+      return l;
+    },
+    [send],
+  );
   const addLineFromStations = useCallback(
     (stations: PlacedStation[], mode: LineMode, color?: [number, number, number]) => {
       const g = graphRef.current;
@@ -410,6 +438,7 @@ export function useSim(dataDir: string = ""): UseSim {
     pause,
     setSpeed,
     addLine,
+    replaceLine,
     addLineFromStations,
     replaceLineFromStations,
     removeLine,

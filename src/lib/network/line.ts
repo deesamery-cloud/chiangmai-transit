@@ -75,6 +75,7 @@ export function buildLine(
     roadbound: !p.gradeSeparated,
     fleet: fleetN,
     capex: lineCapex(mode, total, stops.length),
+    drawPoints: points.map((pt) => ({ lon: pt.lon, lat: pt.lat })), // kept so the route can be extended later
   };
 }
 
