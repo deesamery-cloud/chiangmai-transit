@@ -28,7 +28,6 @@ import { playSfx, setSfxMuted } from "@/lib/sfx";
 import { AdvisorIntro, AdvisorDock } from "@/components/advisors/AdvisorPanels";
 import { CITY_SEEDS } from "@/lib/cm-songthaew";
 import { CITIES, DEFAULT_CITY } from "@/lib/cities";
-import { OpeningCinematic } from "@/components/cinematic/OpeningCinematic";
 import { Icon, type IconName } from "@/components/ui/Icon";
 
 const MapCanvas = dynamic(() => import("@/components/map/MapCanvas"), { ssr: false });
@@ -132,7 +131,6 @@ export default function Page() {
   // game, then a persistent bottom-right dock — all 4 faces always visible, click
   // a face for that advisor's live advice (the team is the main advisory UI)
   const [showIntro, setShowIntro] = useState(false); // governor appointment cutscene
-  const [showCinematic, setShowCinematic] = useState(false); // ~60s opening cinematic — plays ONCE per browser (skippable; enabled in mount effect)
   const [buildFlash, setBuildFlash] = useState<string | null>(null); // transient "line open" confirmation toast
   const [lang, setLang] = useState<"en" | "th">("en"); // TH/EN toggle
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
@@ -220,11 +218,6 @@ export default function Page() {
       if (dm && dm in DIFFICULTIES) setDifficulty(dm as Difficulty);
       const dly = localStorage.getItem("cm-daily");
       if (dly) setDaily(JSON.parse(dly));
-      // the opening cinematic plays ONCE per browser (skippable). `cm-cine-seen` is
-      // set when it finishes/skips; `cm-cine-skip` is a test/dev escape hatch.
-      if (localStorage.getItem("cm-cine-skip") !== "1" && localStorage.getItem("cm-cine-seen") !== "1") {
-        setShowCinematic(true);
-      }
     } catch {}
   }, []);
 
@@ -554,7 +547,6 @@ export default function Page() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button className="rpg-ghost" onClick={() => setShowCinematic(true)}>▶ {t("Intro", "ฉากเปิด")}</button>
               <button className="rpg-ghost" onClick={toggleLang}>🌐 {lang === "en" ? "EN" : "ไทย"}</button>
             </div>
           </div>
@@ -710,12 +702,6 @@ export default function Page() {
           </div>
         </div>
 
-        {showCinematic && (
-          <OpeningCinematic
-            lang={lang}
-            onDone={() => { setShowCinematic(false); try { localStorage.setItem("cm-cine-seen", "1"); } catch {} }}
-          />
-        )}
       </main>
     );
   }

@@ -84,14 +84,12 @@ The game is a **PWA** (installable + offline) and **static-exports** for **Capac
   happy/unhappy/star/trophy/play/pause…). **Convention: NO emoji as functional icons in the HUD** — emoji read
   as "generic AI dashboard"; use `<Icon>` (bottom-bar buttons map `tool.id → TOOL_ICON`). Incidental emoji inside
   data (goal/difficulty/event/demographic glyphs) remain.
-- `src/components/cinematic/OpeningCinematic.tsx` — a ~60s **cinematic opening** ("how you become Governor")
-  that plays **every time the game is entered** (skippable via the Skip ⏭ button; `showCinematic` inits `true`).
-  `localStorage cm-cine-skip==="1"` is a dev/test escape hatch to suppress it (the verify scripts set it). A
-  "▶ Watch intro" button on the start screen replays it after a skip. Six Magnific-painted 16:9 scenes in `public/cinematic/{1..6}.jpg` (dawn city → traffic →
-  appointment → governor overlook → transit vision → dusk title card) with Ken-Burns drift + crossfade + rising
-  bilingual narration + letterbox + progress timeline + Skip; click advances, last scene = title + Begin. Falls
-  back to a per-scene gradient if an image is missing. Verify: `scripts/verify-cinematic.mjs`. (Keyframes
-  `cm-kenburns/cm-cap-rise/cm-cine-title` in globals.css, honour reduced-motion.)
+- **Opening cinematic REMOVED** (2026-06-17, user: "too problematic"). The `OpeningCinematic` component +
+  its render + the start-screen "▶ Intro" replay button + `scripts/verify-cinematic.mjs` are gone; the app
+  now loads **straight to the start screen**. `public/cinematic/{1..6}.jpg` are kept (scene 6 is still the
+  start-screen dusk backdrop + `GOAL_PHOTO` uses other images). The governor-appointment `AdvisorIntro`
+  cutscene (on game start) is unaffected. Keyframes `cm-kenburns/cm-cap-rise/cm-cine-title` linger in
+  globals.css (harmless/unused).
 - `src/lib/cm-songthaew.ts` — per-city REAL songthaew/baht-bus networks as route corridors, keyed by city id
   in `CITY_SEEDS` (Chiang Mai rod-daeng: Warorot hub + colour-coded red/green/blue/orange/gold/teal; Pattaya
   baht-bus Beach↔Second loop + Sukhumvit/Jomtien/Naklua; Hua Hin green: Phetkasem/beach/Khao Takiab). Used by
