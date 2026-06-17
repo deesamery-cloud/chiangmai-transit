@@ -1,0 +1,19 @@
+{
+  "name": "Chiang Mai Transit — เชียงใหม่ Transit",
+  "short_name": "CM Transit",
+  "description": "Build Chiang Mai's metro & songthaew network and pull the city off the road. ผังเมืองรถไฟฟ้า + รถแดง",
+  "lang": "th",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0602",
+  "theme_color": "#2e2113",
+  "categories": ["games", "simulation"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

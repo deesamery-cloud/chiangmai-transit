@@ -11,6 +11,23 @@ commuters (residents, students, tourists) walk, drive (jamming roads), or ride. 
 pnpm install
 pnpm dev          # http://localhost:3000  (dev server works on :3000)
 ```
+
+## Mobile / Thai-local (see MOBILE.md)
+The game is a **PWA** (installable + offline) and **static-exports** for **Capacitor** (Play/App Store).
+- **PWA**: `public/manifest.webmanifest` + `public/sw.js` (caches app shell + `/data/*.json`) + `public/icons/*`
+  + `<PwaRegister/>` (in `layout.tsx`). `next.config.ts` has `output:"export"` → `pnpm build` emits `./out`.
+  **GOTCHA: the SW registers ONLY in production.** A cache-first SW in `next dev` caches HMR chunks and serves
+  them stale → reloads hang / ChunkLoadError. `PwaRegister` self-heals in dev (unregisters any SW + clears caches);
+  if a dev page misbehaves, hard-refresh (Cmd+Shift+R) once.
+- **Capacitor**: `capacitor.config.json` (`webDir:"out"`) + `pnpm cap:android` / `cap:ios` (run on your machine —
+  needs Android Studio / Xcode). Verified `pnpm build` produces a clean static `out/`.
+- **Daily Challenge** (`startDaily` in page.tsx): date-seeded Grade-A/scratch/Medium run, local best + streak in
+  `localStorage cm-daily`; a gold strip on the RPG start screen. Global leaderboard = deferred (needs serverless KV).
+- **Low-end perf tier** (`lowEndDevice()` + `AGENT_COUNT_LITE` in config.ts): weak phones run 7k agents (not 15k);
+  `useSim.peoplePerAgent` scales the display factor up so on-screen city numbers stay accurate (page's `ppl` uses it).
+- **Cities** (`src/lib/cities.ts`): registry (Chiang Mai live; Bangkok/Khon Kaen/Phuket scaffolded with bboxes for
+  `pipeline/extract.py`). Loader still fetches root `/data` (Chiang Mai) — per-city loader + picker = remaining work.
+- Verify mobile/PWA: `scripts/verify-mobile.mjs` (manifest/icons/SW/Daily, 390px).
 - Typecheck: **`./node_modules/.bin/tsc --noEmit`** — do NOT use `pnpm exec tsc` (it mis-resolves to
   a bogus standalone `tsc` package and pulls extra deps).
 - Headless sim test: `pnpm dlx tsx scripts/sim-smoke.ts` (prints economy + OD + demographic +

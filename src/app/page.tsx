@@ -56,9 +56,11 @@ function clock(sec: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
-// human-facing "people" count: the agents are a 1:K sample of the real travel
-// market, so multiply visible flow numbers up to city scale (economy stays sim).
-const ppl = (n: number) => fmt(n * PEOPLE_PER_AGENT);
+// daily-challenge date helpers (local time)
+const keyOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const dailyKey = () => keyOf(new Date());
+const yesterdayKey = () => keyOf(new Date(Date.now() - 86_400_000));
+const dailySeed = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
 function money(v: number): string {
   if (!isFinite(v)) return "∞";
   const a = Math.abs(v);
@@ -71,6 +73,9 @@ function money(v: number): string {
 export default function Page() {
   const sim = useSim();
   const { loaded, started, ready, meta, lines, playing, speed, goal } = sim;
+  // human-facing "people" count — agents are a 1:K sample; scale up to city scale.
+  // K is dynamic (higher on the lite tier, which runs fewer agents) so numbers match.
+  const ppl = (n: number) => fmt(n * sim.peoplePerAgent);
 
   const [tool, setTool] = useState<Tool>("pan");
   const [routeDraft, setRouteDraft] = useState<{ lon: number; lat: number }[]>([]); // songthaew route waypoints
@@ -106,6 +111,7 @@ export default function Page() {
   const [showWin, setShowWin] = useState(false); // win overlay currently open
   const goalDoneRef = useRef(false); // latest goalDone, set during render (avoids a conditional hook)
   const prevScoreRef = useRef(0); // last City Score, to flash the number up/down on change (no extra hook)
+  const cityScoreRef = useRef(0); // latest City Score, read by the daily-best tracker effect
   const congAvgRef = useRef<number | null>(null); // smoothed traffic (grade/goal use this, not the rush spike)
   const baselineTrafficRef = useRef<number | null>(null); // no-network traffic, for the "Win the Cars" bar
   // undo: snapshots of {stations, lines} taken before each build/demolish/remove
@@ -124,6 +130,9 @@ export default function Page() {
   // start-screen wizard: pick goal → start-from (scratch / real songthaew) → difficulty → Start
   const [selGoal, setSelGoal] = useState<GoalKind | null>(null);
   const [focusGoal, setFocusGoal] = useState<GoalKind | null>(null); // hovered goal → featured photo/hero
+  // daily challenge: today's seeded map + local best + streak (no backend)
+  const [daily, setDaily] = useState<{ date: string; best: number; streak: number } | null>(null);
+  const dailyRunRef = useRef(false); // is the current game today's daily run?
   const [buildSource, setBuildSource] = useState<"scratch" | "existing">("scratch");
   const seedExistingRef = useRef(false); // seed the real Chiang Mai songthaew network once ready
   // save/load: autosave the network; offer "resume" on the start screen
@@ -159,6 +168,19 @@ export default function Page() {
     }
   });
 
+  // daily challenge: keep today's best City Score (runs every render, reads refs)
+  useEffect(() => {
+    if (!dailyRunRef.current || !meta) return;
+    const today = dailyKey();
+    const score = cityScoreRef.current;
+    setDaily((d) => {
+      if (d && d.date === today && score <= d.best) return d;
+      const next = { date: today, best: Math.max(d && d.date === today ? d.best : 0, score), streak: d?.streak ?? 1 };
+      try { localStorage.setItem("cm-daily", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  });
+
   // show the first-line tutorial once, the first time a game starts
   useEffect(() => {
     if (started && localStorage.getItem("cm-onboarded") !== "1") setShowCoach(true);
@@ -187,6 +209,8 @@ export default function Page() {
       if (l === "th" || l === "en") setLang(l);
       const dm = localStorage.getItem("cm-difficulty");
       if (dm && dm in DIFFICULTIES) setDifficulty(dm as Difficulty);
+      const dly = localStorage.getItem("cm-daily");
+      if (dly) setDaily(JSON.parse(dly));
       // the opening cinematic plays EVERY time the game is entered (skippable);
       // `cm-cine-skip` is a test/dev escape hatch to suppress it (never set in normal play)
       if (localStorage.getItem("cm-cine-skip") === "1") setShowCinematic(false);
@@ -457,11 +481,31 @@ export default function Page() {
     return t(GOALS[g].targetLine, goalTh[g].target);
   };
 
+  // 🗓️ Daily Challenge — today's date seeds a fixed Grade-A / from-scratch / Medium
+  // run; track local best + streak (no backend). Quick-starts (skips the cutscene).
+  const startDaily = () => {
+    const today = dailyKey();
+    setDaily((d) => {
+      let streak = 1;
+      if (d) streak = d.date === today ? d.streak : d.date === yesterdayKey() ? d.streak + 1 : 1;
+      const next = { date: today, best: d && d.date === today ? d.best : 0, streak };
+      try { localStorage.setItem("cm-daily", JSON.stringify(next)); } catch {}
+      return next;
+    });
+    dailyRunRef.current = true;
+    seedExistingRef.current = false;
+    setSelGoal("grade");
+    setDifficulty("medium");
+    setShowIntro(false);
+    sim.startGame("grade", "medium", dailySeed());
+  };
+
   // --- RPG-style full-screen mode/difficulty select ------------------------
   if (!started) {
     const featured = focusGoal ?? selGoal; // which goal's big photo + hero is shown
     const diffTh: Record<Difficulty, string> = { easy: "ง่าย", medium: "ปานกลาง", challenge: "ท้าทาย", hard: "ยาก" };
     const startNow = (g: GoalKind) => {
+      dailyRunRef.current = false;
       seedExistingRef.current = buildSource === "existing";
       setShowIntro(true);
       sim.startGame(g, difficulty, seed);
@@ -517,10 +561,10 @@ export default function Page() {
             ) : (
               <div className="cm-fade-in max-w-[600px]">
                 <h1 className="wordmark text-[34px] leading-tight drop-shadow-[0_3px_18px_rgba(0,0,0,0.95)] sm:text-[52px]" style={{ color: "#fff" }}>{t("Choose your path", "เลือกเส้นทางของคุณ")}</h1>
-                <p className="mt-2 max-w-[520px] text-[14px] leading-relaxed text-white/80 drop-shadow">
+                <p className="mt-2 max-w-[540px] text-[14px] leading-relaxed text-white/80 drop-shadow">
                   {t(
-                    `${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} people move around the real Chiang Mai — most of them driving. Pick a goal, then begin your term as Governor.`,
-                    `ผู้คน ${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} คนเดินทางในเชียงใหม่จริง ส่วนใหญ่ขับรถ เลือกเป้าหมายแล้วเริ่มวาระผู้ว่าฯ ของคุณ`,
+                    `Chiang Mai runs on rod-daeng — its red songthaew trucks. ${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} people travel the real city; most still drive. Master the songthaew, build the metro, and pull the city off the road.`,
+                    `เชียงใหม่ขับเคลื่อนด้วย ‘รถแดง’ — สองแถวประจำเมือง · ผู้คน ${fmt(SIM.agentCount * PEOPLE_PER_AGENT)} คนเดินทางจริง ส่วนใหญ่ยังขับรถ · จัดการรถแดง สร้างรถไฟฟ้า แล้วดึงคนออกจากถนน`,
                   )}
                 </p>
               </div>
@@ -529,6 +573,24 @@ export default function Page() {
 
           {/* bottom control deck */}
           <div className="px-4 pb-5 sm:px-8 sm:pb-7">
+            {/* 🗓️ Daily Challenge — one seeded map a day; reason to come back tomorrow */}
+            <button
+              disabled={!loaded}
+              onClick={startDaily}
+              className="mb-2.5 flex w-full items-center justify-between rounded-xl border px-3.5 py-2 text-left transition-colors disabled:opacity-50"
+              style={{ borderColor: "var(--gold)", background: "rgba(200,150,43,0.14)", backdropFilter: "blur(6px)" }}
+            >
+              <span className="flex items-center gap-2">
+                <span style={{ color: "var(--gold-soft)" }}><Icon name="star" size={16} /></span>
+                <span className="text-[13px] font-semibold text-white">{t("Daily Challenge", "สนามรายวัน")}</span>
+                {daily && daily.date === dailyKey() && (
+                  <span className="num text-[11px] text-white/70">{t("best", "ดีสุด")} {daily.best}</span>
+                )}
+                {daily && daily.streak > 1 && <span className="text-[11px] font-semibold text-[var(--gold-soft)]">🔥 {daily.streak}</span>}
+              </span>
+              <span className="rpg-chip" data-on="true">{t("Play ▶", "เล่น ▶")}</span>
+            </button>
+
             {/* 4 big goal photo tiles */}
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
               {GOAL_ORDER.map((g) => {
@@ -664,6 +726,7 @@ export default function Page() {
   // compared during render against the previous render's value (cheap, no effect).
   const scoreDir = cityScore > prevScoreRef.current ? 1 : cityScore < prevScoreRef.current ? -1 : 0;
   prevScoreRef.current = cityScore;
+  cityScoreRef.current = cityScore; // for the daily-best tracker effect (above the early return)
   const grade =
     cityScore >= 82 ? { g: "A", c: "#2f8f6b", say: "World-class network 🎉" }
     : cityScore >= 66 ? { g: "B", c: "#4f9e78", say: "Strong — serve more corridors" }

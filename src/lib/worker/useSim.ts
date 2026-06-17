@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Graph } from "@/lib/geo/graph";
 import { Router } from "@/lib/routing/astar";
 import { buildLine, buildLineFromStations, headwayFor, type DrawPoint } from "@/lib/network/line";
-import { DIFFICULTIES, GOALS, LINE_CAP, MAX_FLEET, SIM, STATE_COLOR, type Difficulty, type GoalKind } from "@/lib/config";
+import { AGENT_COUNT_LITE, CITY_POPULATION, DIFFICULTIES, GOALS, LINE_CAP, lowEndDevice, MAX_FLEET, PEOPLE_PER_AGENT, SIM, STATE_COLOR, type Difficulty, type GoalKind } from "@/lib/config";
 import type {
   FromWorker,
   GraphData,
@@ -36,6 +36,7 @@ export interface HistoryPoint {
 
 export interface UseSim {
   loaded: boolean; // data ready, can pick a mode
+  peoplePerAgent: number; // display scale (higher on lite tier, which runs fewer agents)
   started: boolean; // game mode chosen, sim running
   ready: boolean;
   goal: GoalKind | null;
@@ -95,6 +96,7 @@ export function useSim(): UseSim {
   }, [lines]);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeedState] = useState(1); // start at 1× — the player speeds up time deliberately
+  const [peoplePerAgent, setPeoplePerAgent] = useState(PEOPLE_PER_AGENT);
   const [graph, setGraphState] = useState<Graph | null>(null);
   const [zones, setZones] = useState<ZoneData | null>(null);
   const [pois, setPois] = useState<PoiData | null>(null);
@@ -193,6 +195,10 @@ export function useSim(): UseSim {
       const dif = DIFFICULTIES[difficulty];
       const budget = gm.startBudget === Infinity ? Infinity : Math.round(gm.startBudget * dif.budgetMult);
       budgetRef.current = budget;
+      // lite tier: fewer agents on weak phones, but scale the display factor up
+      // so on-screen city numbers stay at full scale
+      const agentCount = lowEndDevice() ? AGENT_COUNT_LITE : SIM.agentCount;
+      setPeoplePerAgent(Math.round(CITY_POPULATION / agentCount));
       setGoal(g);
       setStarted(true);
       send({
@@ -200,7 +206,7 @@ export function useSim(): UseSim {
         graph: d.g,
         zones: d.z,
         pois: d.p,
-        agentCount: SIM.agentCount,
+        agentCount,
         startBudget: budget,
         bankruptcy: dif.bankruptcy,
         costMult: dif.costMult,
@@ -369,6 +375,7 @@ export function useSim(): UseSim {
 
   return {
     loaded,
+    peoplePerAgent,
     started,
     ready,
     goal,

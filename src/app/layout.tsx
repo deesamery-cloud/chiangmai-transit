@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_Thai, Kanit, Trirong } from "next/font/google";
 import "./globals.css";
+import { PwaRegister } from "@/components/pwa/PwaRegister";
 
 // Body / UI face — Kanit covers BOTH Thai and Latin in one characterful family
 // (widely used in Thai games/apps), so the interface reads native rather than a
@@ -33,6 +34,15 @@ export const metadata: Metadata = {
   title: "Chiang Mai Transit Planner",
   description:
     "Build a public-transport network on the real Chiang Mai map and watch commuters respond.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "CM Transit" },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
 };
 
 // Mobile/touch: render at device width (was defaulting to a desktop-width page on
@@ -54,7 +64,7 @@ export default function RootLayout({
       lang="en"
       className={`${kanit.variable} ${trirong.variable} ${notoThai.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">{children}<PwaRegister /></body>
     </html>
   );
 }

@@ -67,6 +67,19 @@ export const DEMOGRAPHICS: Record<
 // 800 m catchment doing the real capture. The ECONOMY stays on sim units.
 export const PEOPLE_PER_AGENT = 6;
 
+// The real city population the agents represent (display target). On a low-end
+// phone we simulate FEWER agents for smooth FPS but scale the per-agent display
+// factor up so on-screen numbers still read at full city scale.
+export const CITY_POPULATION = 90_000; // = SIM.agentCount × PEOPLE_PER_AGENT
+export const AGENT_COUNT_LITE = 7_000; // lite tier for weak Android (Mali-400 / Adreno-3xx / ≤4 cores)
+export function lowEndDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const cores = navigator.hardwareConcurrency ?? 8;
+  // deviceMemory is non-standard; treat missing as fine
+  const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
+  return cores <= 4 || mem <= 3;
+}
+
 // --- Origin→Destination demand model ---------------------------------------
 // The city's real travel desire: named residential ORIGINS (homes) → clustered
 // activity-center DESTINATIONS, weighted by a gravity model. Each corridor is

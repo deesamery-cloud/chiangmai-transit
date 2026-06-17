@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "cap:sync": "next build && npx cap sync",
+    "cap:android": "next build && npx cap sync android && npx cap open android",
+    "cap:ios": "next build && npx cap sync ios && npx cap open ios"
   },
   "dependencies": {
     "@deck.gl/core": "^9.3.4",
