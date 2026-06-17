@@ -12,8 +12,27 @@ export function PwaRegister() {
     if (process.env.NODE_ENV === "production") {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     } else {
-      navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {});
-      if (typeof caches !== "undefined") caches.keys().then((ks) => ks.forEach((k) => caches.delete(k))).catch(() => {});
+      // Dev self-heal: a SW left over from a production/PWA session would serve
+      // STALE chunks under `next dev` → the page loads but isn't interactive
+      // (clicks/Skip do nothing). Unregister it, clear caches, and if one was
+      // actively controlling this page, reload ONCE (guarded) so we get the live,
+      // clickable build instead of the dead cached one.
+      const hadController = !!navigator.serviceWorker.controller;
+      Promise.all([
+        navigator.serviceWorker
+          .getRegistrations()
+          .then((rs) => Promise.all(rs.map((r) => r.unregister()))),
+        typeof caches !== "undefined"
+          ? caches.keys().then((ks) => Promise.all(ks.map((k) => caches.delete(k))))
+          : Promise.resolve(),
+      ])
+        .then(() => {
+          if (hadController && !sessionStorage.getItem("cm-sw-healed")) {
+            sessionStorage.setItem("cm-sw-healed", "1");
+            location.reload();
+          }
+        })
+        .catch(() => {});
     }
   }, []);
   return null;
