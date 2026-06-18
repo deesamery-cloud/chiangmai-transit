@@ -2,7 +2,8 @@
 
 A browser **build-and-observe public-transport sandbox** on the real Chiang Mai map. You draw
 two modes — **metro** trunk (place stations → lay track → finish; extend/demolish/undo) and
-**songthaew** road-bound feeders (draw a route along the streets) — ~15,000 simulated
+**songthaew** road-bound feeders (draw a route along the streets; **extend** by drawing onward
+from a line's end, or with that line selected) — ~15,000 simulated
 commuters (residents, students, tourists) walk, drive (jamming roads), or ride. You fight
 **crowding** and serve real **origin→destination demand** while watching a live **City Score**.
 
@@ -93,10 +94,16 @@ The game is **installable** (manifest) and **static-exports** for **Capacitor** 
   cutscene (on game start) is unaffected. Keyframes `cm-kenburns/cm-cap-rise/cm-cine-title` linger in
   globals.css (harmless/unused).
 - `src/lib/cm-songthaew.ts` — per-city REAL songthaew/baht-bus networks as route corridors, keyed by city id
-  in `CITY_SEEDS` (Chiang Mai rod-daeng: Warorot hub + colour-coded red/green/blue/orange/gold/teal; Pattaya
-  baht-bus Beach↔Second loop + Sukhumvit/Jomtien/Naklua; Hua Hin green: Phetkasem/beach/Khao Takiab). Used by
+  in `CITY_SEEDS` (Chiang Mai rod-daeng; Pattaya baht-bus Beach↔Second loop + Sukhumvit/Jomtien/Naklua; Hua Hin
+  green Phetkasem/beach/Khao Takiab; Hat Yai Niphat-Uthit/Phetkasem/PSU; Korat Ratchadamnoen/Mittraphap). Used by
   the start screen's "Start from existing songthaew" option, which seeds `CITY_SEEDS[city.id]` via
   `sim.addLine(corridor.points, corridor.mode ?? "songthaew", color)` once the worker is ready (`seedExistingRef`).
+- **Songthaew EXTEND** (route-drawn lines): `buildLine` stores `TransitLine.drawPoints` (the waypoints);
+  `useSim.replaceLine(id, points, mode, color, fleet)` rebuilds a route line in place. `finishRoute` (page.tsx)
+  extends instead of making a new line when the new draw starts/ends within ~400 m of a songthaew line's endpoint
+  (`routeExtendTarget`), or when that songthaew line is selected (`pickTool` keeps the selection on entering the
+  route tool); `combineExtend` attaches the new waypoints at the nearest end. Metro extends via stations
+  (`finishRail`/`replaceLineFromStations`), unchanged.
 - `src/app/page.tsx` — the whole HUD. **Start screen = an RPG-style full-screen mode select** (NOT a form):
   a big cinematic photo per goal (`public/modeselect/{cars,money,grade,free}.jpg`, `GOAL_PHOTO`) fills the
   screen and crossfades as you hover/pick (`focusGoal` for hover, `selGoal` for the choice); a huge white+gold
