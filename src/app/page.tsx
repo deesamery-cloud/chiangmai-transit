@@ -267,16 +267,15 @@ export default function Page() {
 
   const pickTool = (t: Tool) => {
     if (t === "track" || t === "route") {
-      // Keep a selected songthaew line when entering the route tool so it can be
-      // EXTENDED (draw more route → it appends). Otherwise start a NEW line with
-      // the first free palette colour.
+      // a NEW line always gets the first free palette colour
+      const used = new Set(lines.map((l) => l.color.join(",")));
+      const free = LINE_COLORS.findIndex((c) => !used.has(c.rgb.join(",")));
+      setColorIdx(free >= 0 ? free : 0);
+      // Keep a selected songthaew line when entering the route tool ONLY so it can
+      // be EXTENDED by drawing from its end; drawing elsewhere builds a new line in
+      // the colour above (the proximity guard in routeExtendTarget decides which).
       const keepForExtend = t === "route" && lines.some((l) => l.id === selectedLineId && l.mode === "songthaew");
-      if (!keepForExtend) {
-        const used = new Set(lines.map((l) => l.color.join(",")));
-        const free = LINE_COLORS.findIndex((c) => !used.has(c.rgb.join(",")));
-        setColorIdx(free >= 0 ? free : 0);
-        setSelectedLineId(null);
-      }
+      if (!keepForExtend) setSelectedLineId(null);
     }
     setChain([]);
     setRouteDraft([]);
@@ -319,25 +318,21 @@ export default function Page() {
     if (m === dFA) return [...[...draft].reverse(), ...base]; // draft starts at start A → prepend reversed
     return [...draft, ...base]; // draft ends at start A → prepend
   };
-  // which songthaew line a new route should extend: the SELECTED one (explicit
-  // intent), else any whose endpoint the new route starts/ends near.
+  // A new route EXTENDS a line only when (a) that songthaew line is SELECTED and
+  // (b) the new route starts/ends near one of its endpoints. Otherwise it's a
+  // brand-new line — so picking a new colour and drawing elsewhere never merges
+  // into the previously-built (still-selected) line.
+  const EXTEND_M = 220; // within ~220 m of the selected line's end = extend
   const routeExtendTarget = (draft: { lon: number; lat: number }[]): TransitLine | null => {
-    const cand = lines.filter((l) => l.mode === "songthaew" && l.stops.length >= 2);
-    const nearEnd = (l: TransitLine) => {
-      const a = l.stops[0], b = l.stops[l.stops.length - 1];
-      const f = draft[0], g = draft[draft.length - 1];
-      return Math.min(
-        haversine(f.lon, f.lat, a.lon, a.lat), haversine(f.lon, f.lat, b.lon, b.lat),
-        haversine(g.lon, g.lat, a.lon, a.lat), haversine(g.lon, g.lat, b.lon, b.lat),
-      );
-    };
-    const sel = cand.find((l) => l.id === selectedLineId);
-    if (sel) return sel; // selected songthaew line → always extend it
-    const EXTEND_M = 400; // otherwise auto-extend when the draw begins/ends at an endpoint
-    let best: TransitLine | null = null;
-    let bestD = EXTEND_M;
-    for (const l of cand) { const d = nearEnd(l); if (d < bestD) { bestD = d; best = l; } }
-    return best;
+    const sel = lines.find((l) => l.id === selectedLineId && l.mode === "songthaew" && l.stops.length >= 2);
+    if (!sel) return null;
+    const a = sel.stops[0], b = sel.stops[sel.stops.length - 1];
+    const f = draft[0], g = draft[draft.length - 1];
+    const near = Math.min(
+      haversine(f.lon, f.lat, a.lon, a.lat), haversine(f.lon, f.lat, b.lon, b.lat),
+      haversine(g.lon, g.lat, a.lon, a.lat), haversine(g.lon, g.lat, b.lon, b.lat),
+    );
+    return near <= EXTEND_M ? sel : null;
   };
   const finishRoute = () => {
     if (routeDraft.length < 2) {
@@ -1511,8 +1506,8 @@ export default function Page() {
             </span>
             <span className="px-1 text-[11px] text-[var(--muted)]">
               {lines.some((l) => l.id === selectedLineId && l.mode === "songthaew")
-                ? t("extending selected line — draw onward, then Finish", "ต่อสายที่เลือก — วาดต่อ แล้วกด Finish")
-                : t("click road points · Finish. Start at a line's end to extend it.", "คลิกจุดบนถนน · กด Finish · เริ่มที่ปลายสายเดิมเพื่อต่อสาย")} · {routeDraft.length}
+                ? t("draw from the selected line's end to extend it · elsewhere = new line", "วาดต่อจากปลายสายที่เลือก = ต่อสาย · ที่อื่น = สายใหม่")
+                : t("click road points · then Finish (new line)", "คลิกจุดบนถนน · แล้วกด Finish (สายใหม่)")} · {routeDraft.length}
             </span>
             <button className="btn" onClick={() => setRouteDraft((p) => p.slice(0, -1))} disabled={!routeDraft.length}>
               ↶ Undo
