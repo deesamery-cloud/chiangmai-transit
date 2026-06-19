@@ -900,6 +900,7 @@ export default function Page() {
         showCoverage={showCoverage}
         zones={sim.zones}
         pois={sim.pois}
+        landmarks={sim.landmarks}
         simTime={meta?.simTime ?? 0}
         selectedOD={selectedOD}
       />

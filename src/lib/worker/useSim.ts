@@ -8,6 +8,8 @@ import { AGENT_COUNT_LITE, CITY_POPULATION, DIFFICULTIES, GOALS, LINE_CAP, lowEn
 import type {
   FromWorker,
   GraphData,
+  Landmark,
+  LandmarkData,
   LineMode,
   PlacedStation,
   PoiData,
@@ -47,6 +49,7 @@ export interface UseSim {
   graph: Graph | null;
   zones: ZoneData | null;
   pois: PoiData | null;
+  landmarks: Landmark[];
   snapRef: React.RefObject<SnapPair>;
   history: HistoryPoint[];
   ticker: string[];
@@ -108,6 +111,7 @@ export function useSim(dataDir: string = ""): UseSim {
   const [graph, setGraphState] = useState<Graph | null>(null);
   const [zones, setZones] = useState<ZoneData | null>(null);
   const [pois, setPois] = useState<PoiData | null>(null);
+  const [landmarks, setLandmarks] = useState<Landmark[]>([]);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [ticker, setTicker] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
@@ -184,6 +188,7 @@ export function useSim(dataDir: string = ""): UseSim {
     setLoaded(false);
     dataRef.current = null;
     const base = `/data/${dataDir ? dataDir + "/" : ""}`;
+    setLandmarks([]);
     (async () => {
       const [g, z, p] = await Promise.all([
         fetch(`${base}network.graph.json`).then((r) => r.json() as Promise<GraphData>),
@@ -199,6 +204,11 @@ export function useSim(dataDir: string = ""): UseSim {
       setZones(z);
       setPois(p);
       setLoaded(true);
+      // landmarks are non-blocking + optional (a city may not have them yet)
+      fetch(`${base}landmarks.json`)
+        .then((r) => (r.ok ? (r.json() as Promise<LandmarkData>) : { landmarks: [] }))
+        .then((lm) => { if (alive) setLandmarks(lm.landmarks || []); })
+        .catch(() => {});
     })();
 
     return () => {
@@ -429,6 +439,7 @@ export function useSim(dataDir: string = ""): UseSim {
     graph,
     zones,
     pois,
+    landmarks,
     snapRef,
     history,
     ticker,

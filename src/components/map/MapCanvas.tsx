@@ -11,7 +11,7 @@ import type { Layer } from "@deck.gl/core";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Graph, haversine } from "@/lib/geo/graph";
 import { linePathCoords } from "@/lib/network/line";
-import type { LineMode, ODCorridor, PlacedStation, PoiData, SnapshotMeta, TransitLine, ZoneData } from "@/lib/types";
+import type { Landmark, LineMode, ODCorridor, PlacedStation, PoiData, SnapshotMeta, TransitLine, ZoneData } from "@/lib/types";
 import type { SnapPair } from "@/lib/worker/useSim";
 import { MAP, MODE_PARAMS, SIM, TRAVEL, type Tool } from "@/lib/config";
 
@@ -96,6 +96,24 @@ const truckIcon = (fill: string) =>
 const TRUCK: Record<number, { id: string; url: string; width: number; height: number }> = {};
 for (let c = 1; c <= 5; c++) TRUCK[c] = { id: `truck-${c}`, url: truckIcon(CROWD_FILL[c]), width: 40, height: 26 };
 
+// civic LANDMARKS (extract-landmarks.py) — the named places locals navigate by.
+// Importance tier (0 = show first / at lower zoom). Indigo marker, so it reads
+// distinct from gold stations + red songthaew.
+const LM_TIER: Record<string, number> = {
+  rail: 0, bus: 0, monument: 0, uni: 1, mall: 1, market: 2, hospital: 2, sight: 3, temple: 3,
+};
+const LM_COLOR: [number, number, number] = [62, 92, 138]; // indigo
+// how many landmark LABELS to show at a given zoom (markers always show) — keeps
+// the default view uncluttered, reveals more as you zoom in. Landmarks are sorted
+// by tier so the most important names appear first.
+function lmLabelCount(zoom: number): number {
+  if (zoom < 12.2) return 0;
+  if (zoom < 12.8) return 8;
+  if (zoom < 13.4) return 16;
+  if (zoom < 14.0) return 30;
+  return 80;
+}
+
 interface LineRender {
   id: string;
   path: [number, number][];
@@ -133,6 +151,7 @@ interface Props {
   showCoverage: boolean;
   zones: ZoneData | null;
   pois: PoiData | null;
+  landmarks: Landmark[];
   simTime: number;
   selectedOD: ODCorridor | null;
 }
@@ -158,6 +177,7 @@ interface FrameState {
   showAgents: boolean;
   showCoverage: boolean;
   presence: PresencePt[];
+  landmarks: Landmark[];
   hour: number;
   hourBucket: number;
   zoom: number;
@@ -531,6 +551,57 @@ function DeckLayers({ frameRef }: { frameRef: React.RefObject<FrameState> }) {
         );
       }
 
+      // --- civic landmarks: the named places locals navigate by ----------
+      // (Warorot, CMU, Ya Mo, The Mall, PSU, stations, hospitals, markets…).
+      // Indigo dots always; labels are importance-ranked + zoom-gated so the
+      // default view stays uncluttered but you can find your city's icons.
+      if (f.landmarks.length) {
+        layers.push(
+          new ScatterplotLayer({
+            id: "landmark-dots",
+            data: f.landmarks,
+            getPosition: (d: Landmark) => [d.lon, d.lat],
+            radiusUnits: "pixels",
+            getRadius: 3.5,
+            radiusMinPixels: 2.5,
+            filled: true,
+            getFillColor: [...LM_COLOR, 235] as [number, number, number, number],
+            stroked: true,
+            getLineColor: [255, 255, 255, 235],
+            lineWidthUnits: "pixels",
+            getLineWidth: 1.2,
+            parameters: { depthTest: false },
+          }),
+        );
+        const shown = f.landmarks.slice(0, lmLabelCount(f.zoom));
+        if (shown.length) {
+          layers.push(
+            new TextLayer({
+              id: "landmark-labels",
+              data: shown,
+              getPosition: (d: Landmark) => [d.lon, d.lat],
+              getText: (d: Landmark) => d.name,
+              getSize: 11,
+              getColor: [46, 33, 19, 255],
+              getPixelOffset: [0, -9],
+              background: true,
+              getBackgroundColor: [251, 247, 239, 230],
+              backgroundPadding: [4, 2],
+              getBorderColor: [...LM_COLOR, 200] as [number, number, number, number],
+              getBorderWidth: 1,
+              fontFamily: "'Noto Sans Thai', system-ui, sans-serif",
+              fontWeight: 600,
+              characterSet: "auto",
+              sizeUnits: "pixels",
+              getTextAnchor: "middle",
+              getAlignmentBaseline: "bottom",
+              parameters: { depthTest: false },
+              updateTriggers: { getText: shown.length },
+            }),
+          );
+        }
+      }
+
       // --- placed stations as Lanna chedi markers (chained ones go teak) -
       if (f.stations.length) {
         const chained = new Set(f.railDraft);
@@ -666,8 +737,13 @@ export default function MapCanvas(props: Props) {
     graph, lines, vehicles, snapRef, tool, stations, railDraft, routeDraft,
     onPlaceStation, onChainStation, onAddRoutePoint, onDemolishStation, onStationInfo, onDemolishLine,
     selectedLineId, onSelectLine, center,
-    showDensity, showAgents, showCoverage, zones, pois, simTime, selectedOD,
+    showDensity, showAgents, showCoverage, zones, pois, landmarks, simTime, selectedOD,
   } = props;
+  // landmarks sorted by importance tier so the most notable labels show first
+  const landmarksSorted = useMemo<Landmark[]>(
+    () => [...landmarks].sort((a, b) => (LM_TIER[a.kind] ?? 5) - (LM_TIER[b.kind] ?? 5)),
+    [landmarks],
+  );
   const dragging = useRef(false);
   const dragMoved = useRef(false);
   const lastChained = useRef<string | null>(null);
@@ -751,12 +827,12 @@ export default function MapCanvas(props: Props) {
 
   const frameRef = useRef<FrameState>({
     lineKey, lineRenders, stopRenders, interchanges, vehicles, snapRef, roadSegs, drawActive, tool,
-    stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, onStationInfo, showDensity, showAgents, showCoverage, presence, hour, hourBucket, zoom, selectedOD,
+    stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, onStationInfo, showDensity, showAgents, showCoverage, presence, landmarks: landmarksSorted, hour, hourBucket, zoom, selectedOD,
   });
   useEffect(() => {
     frameRef.current = {
       lineKey, lineRenders, stopRenders, interchanges, vehicles, snapRef, roadSegs, drawActive, tool,
-      stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, onStationInfo, showDensity, showAgents, showCoverage, presence, hour, hourBucket, zoom, selectedOD,
+      stations, railDraft, routeDraft, deckClickAt, onSelectLine, onDemolishLine, onStationInfo, showDensity, showAgents, showCoverage, presence, landmarks: landmarksSorted, hour, hourBucket, zoom, selectedOD,
     };
   });
 

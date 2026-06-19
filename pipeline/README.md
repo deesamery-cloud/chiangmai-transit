@@ -31,14 +31,22 @@ Mai constants), so you never hand-edit the source. `CITY_OUT` is the subdir unde
 **both** scripts with the **same** env so the trio lands together:
 
 ```bash
-# Pattaya -> public/data/pattaya/{network.graph,pois,zones}.json
+# Pattaya -> public/data/pattaya/{network.graph,pois,zones,landmarks}.json
 CITY_BBOX="12.88,100.855,12.97,100.93" CITY_OUT=pattaya python3 extract.py
 CITY_BBOX="12.88,100.855,12.97,100.93" CITY_OUT=pattaya python3 extract-pois.py
+CITY_BBOX="12.88,100.855,12.97,100.93" CITY_OUT=pattaya python3 extract-landmarks.py
 
 # Hua Hin -> public/data/huahin/...
 CITY_BBOX="12.53,99.93,12.61,100.005" CITY_OUT=huahin python3 extract.py
 CITY_BBOX="12.53,99.93,12.61,100.005" CITY_OUT=huahin python3 extract-pois.py
+CITY_BBOX="12.53,99.93,12.61,100.005" CITY_OUT=huahin python3 extract-landmarks.py
 ```
+
+`extract-landmarks.py` adds `landmarks.json` — the named civic places locals
+navigate by (railway/bus stations, universities, hospitals, malls, markets,
+monuments, museums/attractions, major temples; hotels excluded). The app shows
+these as labelled markers on the map. For the default Chiang Mai run it (and the
+others) with `CITY_OUT=""`.
 
 Then flip that city's `ready: true` in `src/lib/cities.ts`. Non-default cities
 are **lazy-loaded** (the service worker runtime-caches `/data/<dir>/*.json` on

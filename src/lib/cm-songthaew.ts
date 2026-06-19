@@ -67,10 +67,15 @@ export const CM_SONGTHAEW: SongthaewCorridor[] = [
 // Naklua north. Stylised corridors within the CBD bbox.
 const PATTAYA: SongthaewCorridor[] = [
   {
-    name: "Beach ↔ Second Rd loop",
-    nameTh: "พัทยาสายชายหาด — เลียบหาด/สายสอง",
+    // the famous one-way baht-bus loop: SOUTH down Beach Rd, NORTH up Second Rd
+    name: "Beach Rd ↓ / Second Rd ↑ loop",
+    nameTh: "วนเดียว — เลียบหาดลงใต้ / สายสองขึ้นเหนือ",
     color: C("Red"),
-    points: [P(100.8685, 12.953), P(100.8685, 12.927), P(100.8720, 12.927), P(100.8720, 12.953), P(100.8685, 12.953)],
+    points: [
+      P(100.8688, 12.9540), P(100.8688, 12.9460), P(100.8688, 12.9380), P(100.8690, 12.9285), // ↓ Beach Rd
+      P(100.8725, 12.9285), P(100.8723, 12.9380), P(100.8722, 12.9460), P(100.8722, 12.9540), // ↑ Second Rd
+      P(100.8688, 12.9540), // close the loop at the north end
+    ],
   },
   {
     name: "Sukhumvit spine (N–S)",
@@ -152,22 +157,23 @@ const HATYAI: SongthaewCorridor[] = [
     points: [P(100.474, 7.030), P(100.474, 7.010), P(100.475, 6.990)],
   },
   {
-    name: "Thamnoonvithi → railway",
-    nameTh: "ธรรมนูญวิถี → สถานีรถไฟ",
+    name: "Thamnoonvithi → railway station",
+    nameTh: "ธรรมนูญวิถี → สถานีรถไฟ (ชุมทางหาดใหญ่)",
     color: C("Green"),
-    points: [P(100.465, 7.008), P(100.474, 7.008), P(100.485, 7.008)],
+    points: [P(100.476, 7.008), P(100.471, 7.006), P(100.4673, 7.0039)],
   },
   {
-    name: "Kho Hong / PSU (south)",
-    nameTh: "คอหงส์ / ม.อ. (ใต้)",
+    // THE student artery locals say is essential: downtown market ↔ PSU campus
+    name: "Market ↔ PSU (Kanchanavanich)",
+    nameTh: "ตลาด ↔ ม.อ. (กาญจนวนิช)",
     color: C("Orange"),
-    points: [P(100.475, 6.995), P(100.490, 6.986), P(100.500, 6.982)],
+    points: [P(100.474, 7.0075), P(100.485, 7.0085), P(100.4960, 7.0097)],
   },
   {
-    name: "North corridor",
-    nameTh: "สายเหนือ",
+    name: "North (hospitals)",
+    nameTh: "สายเหนือ (โรงพยาบาล)",
     color: C("Purple"),
-    points: [P(100.474, 7.015), P(100.470, 7.028), P(100.466, 7.038)],
+    points: [P(100.473, 7.012), P(100.470, 7.018), P(100.469, 7.022)],
   },
 ];
 

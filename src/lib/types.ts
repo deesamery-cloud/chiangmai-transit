@@ -53,6 +53,20 @@ export interface PoiData {
   homes?: HomePlace[];
 }
 
+// A civic LANDMARK locals navigate by (extract-landmarks.py) — shown as a named
+// marker on the map. kind drives the icon + zoom tier.
+export type LandmarkKind =
+  | "rail" | "bus" | "uni" | "hospital" | "mall" | "market" | "monument" | "sight" | "temple";
+export interface Landmark {
+  lon: number;
+  lat: number;
+  name: string;
+  kind: LandmarkKind;
+}
+export interface LandmarkData {
+  landmarks: Landmark[];
+}
+
 export interface Zone {
   lon: number;
   lat: number;

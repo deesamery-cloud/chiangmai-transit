@@ -38,6 +38,12 @@ The game is **installable** (manifest) and **static-exports** for **Capacitor** 
   (scaffolded = dimmed "soon"). Daily Challenge is shown only for the default city (comparable scores).
   Add a city: env-parameterized extract (`CITY_BBOX`/`CITY_OUT`, see pipeline/README) → `public/data/<dir>/` →
   `ready:true` → a `CITY_SEEDS[<id>]` corridor set.
+- **Civic landmarks** (`pipeline/extract-landmarks.py` → `public/data/<dir>/landmarks.json`): the named places
+  locals navigate by (rail/bus stations, universities, hospitals, malls, markets, monuments, museums, temples;
+  hotels excluded — keeps it civic). `useSim` fetches it (non-blocking, optional) → `sim.landmarks`; `MapCanvas`
+  draws indigo dots (always) + name labels that are importance-ranked (`LM_TIER`) and zoom-gated (`lmLabelCount`)
+  so the default view stays uncluttered. Added because a resident playtest found the map didn't show their
+  city's icons (Warorot, CMU, Ya Mo, The Mall, PSU, …) — now it does, in all cities.
 - **Per-city transit seeds** (`src/lib/cm-songthaew.ts`): `CITY_SEEDS: Record<cityId, SongthaewCorridor[]>`
   (Chiang Mai red trucks, Pattaya baht buses, Hua Hin green). Corridors take an optional `mode` (default
   "songthaew"); the "Existing songthaew" start seeds `CITY_SEEDS[city.id]` via `sim.addLine`.
